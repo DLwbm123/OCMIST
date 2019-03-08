@@ -110,34 +110,43 @@
              <height>30</height>
             </size>
            </property>
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
+           </property>
            <property name="text">
             <string>打开项目</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="pushButton_3">
+          <widget class="QPushButton" name="button_pred">
            <property name="minimumSize">
             <size>
              <width>0</width>
              <height>30</height>
             </size>
            </property>
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
+           </property>
            <property name="text">
-            <string>PushButton</string>
+            <string>显示/隐藏预测结果</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="pushButton_4">
+          <widget class="QPushButton" name="button_gt">
            <property name="minimumSize">
             <size>
              <width>0</width>
              <height>30</height>
             </size>
            </property>
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
+           </property>
            <property name="text">
-            <string>PushButton</string>
+            <string>显示/隐藏参考标准</string>
            </property>
           </widget>
          </item>
@@ -148,6 +157,9 @@
              <width>0</width>
              <height>30</height>
             </size>
+           </property>
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
            </property>
            <property name="text">
             <string>PushButton</string>
@@ -162,6 +174,9 @@
              <height>30</height>
             </size>
            </property>
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
+           </property>
            <property name="text">
             <string>PushButton</string>
            </property>
@@ -174,6 +189,9 @@
              <width>0</width>
              <height>30</height>
             </size>
+           </property>
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
            </property>
            <property name="text">
             <string>PushButton</string>
@@ -198,6 +216,9 @@
          </item>
          <item>
           <widget class="QLabel" name="label_slice">
+           <property name="focusPolicy">
+            <enum>Qt::NoFocus</enum>
+           </property>
            <property name="text">
             <string/>
            </property>
@@ -495,6 +516,9 @@
        </item>
        <item>
         <widget class="QSlider" name="slider">
+         <property name="focusPolicy">
+          <enum>Qt::NoFocus</enum>
+         </property>
          <property name="minimum">
           <number>1</number>
          </property>

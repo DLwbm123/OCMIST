@@ -44,7 +44,8 @@ class ImageManager():
             't1': os.path.join(self.path, 'data_t1.nii.gz'),
             't1ce': os.path.join(self.path, 'data_t1ce.nii.gz'),
             't2': os.path.join(self.path, 'data_t2.nii.gz'),
-            'truth': os.path.join(self.path, 'truth.nii.gz')
+            'truth': os.path.join(self.path, 'truth_124.nii'),
+            'pred': os.path.join(self.path, 'prediction_124.nii')
         }
         # 不符合条件则返回并提示
         self.image_file = dict()
@@ -54,22 +55,22 @@ class ImageManager():
                 self.image_file[f] = nib.load(self.image_path[f])
                 self.image[f] = Image(self.image_file[f], f)
             else:
-                QMessageBox.information(self, 'Information', f + ' file does not exist.', QMessageBox.Ok)
+                QMessageBox.information(self.main_window, 'Information', f + ' file does not exist.', QMessageBox.Ok)
                 return
         # 检查如果有up{1, 2, 4}.nii则加载，没有则创建空的
-        self.edit_file = dict()
-        self.edit = dict()
-        self.edit_path = {
-            'up1': os.path.join(self.path, 'up1.nii'),
-            'up2': os.path.join(self.path, 'up2.nii'),
-            'up4': os.path.join(self.path, 'up4.nii')
-        }
-        for f in self.edit_path:
-            if os.path.isfile(self.edit_path[f]):
-                self.edit_file[f] = nib.load(self.edit_path[f])
-                self.edit[f] = Image(self.edit_file[f], f)
-            else:
-                pass
+        # self.edit_file = dict()
+        # self.edit = dict()
+        # self.edit_path = {
+        #     'up1': os.path.join(self.path, 'up1.nii'),
+        #     'up2': os.path.join(self.path, 'up2.nii'),
+        #     'up4': os.path.join(self.path, 'up4.nii')
+        # }
+        # for f in self.edit_path:
+        #     if os.path.isfile(self.edit_path[f]):
+        #         self.edit_file[f] = nib.load(self.edit_path[f])
+        #         self.edit[f] = Image(self.edit_file[f], f)
+        #     else:
+        #         pass
         # 然后显示中间的切片，允许响应用户操作
         self.main_window.image_loaded = True
         self.main_window.sliderValueChanged(self.main_window.slider.value())
@@ -143,10 +144,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.image_loaded = False
         self.image_manager = ImageManager(self)
+        self.show_gt = False
+        self.show_pred = True
 
         ### Setup operations.
         self.slider.valueChanged.connect(self.sliderValueChanged)
         self.button_open.pressed.connect(self.actionOpenProject)
+        self.button_pred.pressed.connect(self.switchShowPred)
+        self.button_gt.pressed.connect(self.switchShowGt)
         self.viewer_t1.mousemove.connect(self.viewerMouseMove)
         self.viewer_t1ce.mousemove.connect(self.viewerMouseMove)
         self.viewer_t2.mousemove.connect(self.viewerMouseMove)
@@ -163,6 +168,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.show()
 
     def wheelEvent(self, event):
+        if not self.image_loaded:
+            return
         v = self.slider.value()
         if event.angleDelta().y() > 0:
             v += 1
@@ -173,16 +180,47 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.slider.setValue(v)
         self.sliderValueChanged(v)
 
-    def keyReleaseEvent(self, event):
+    def keyPressEvent(self, event):
+        if event.isAutoRepeat():
+            return
+        if event.key() == Qt.Key_O:
+            path = 'sample_Brats18_2013_0_1'
+            self.image_manager.openProject(path)
         if event.key() == Qt.Key_Escape:
             self.close()
 
+        if not self.image_loaded:
+            return
+
+        if event.key() == Qt.Key_Space:
+            self.show_pred ^= True
+            self.plotAll()
+        if event.key() == Qt.Key_Tab:
+            self.show_gt ^= True
+            self.plotAll()
+
+    def keyReleaseEvent(self, event):
+        if event.isAutoRepeat():
+            return
+        if not self.image_loaded:
+            return
+        if event.key() == Qt.Key_Space:
+            self.show_pred ^= True
+            self.plotAll()
+        if event.key() == Qt.Key_Tab:
+            self.show_gt ^= True
+            self.plotAll()
+
     def viewerMouseMove(self, event):
+        if not self.image_loaded:
+            return
         for m in self.mask:
             self.mask[m].cross = [event.y(), event.x()]
             self.mask[m].paint()
 
     def viewerMouseLeave(self):
+        if not self.image_loaded:
+            return
         for m in self.mask:
             self.mask[m].cross = [-100, -100]
             self.mask[m].paint()
@@ -195,9 +233,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.mask['t2'] = Mask(self.viewer_t2)
 
     def actionOpenProject(self):
-        path = 'Z:/zhoubowei/Documents/3DUnetCNN/project/app/sample_Brats18_2013_0_1'
-        # path = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        path = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
         self.image_manager.openProject(path)
+
+    def switchShowGt(self):
+        self.show_gt ^= True
+        self.plotAll()
+
+    def switchShowPred(self):
+        self.show_pred ^= True
+        self.plotAll()
 
     def getViewer(self, name):
         if name == 'flair':
@@ -211,24 +256,37 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def plotImage(self, image, slice):
         qlabel = self.getViewer(image.name)
-        img = np.rot90(image.char_data[:, :, slice], -1).copy()
-        qimg = QImage(img, image.dim[0], image.dim[1], QImage.Format_Grayscale8)
+        img_gray = np.rot90(image.char_data[:, :, slice], -1).copy()
+        img = np.stack((img_gray,) * 3, axis = -1)
+        if self.show_gt:
+            gt = np.rot90(self.image_manager.image['truth'].data[:, :, slice], -1).copy()
+            gt *= 255
+            gt = np.max([gt, img_gray], axis = 0)
+            img[:, :, 0] = gt
+        if self.show_pred:
+            pred = np.rot90(self.image_manager.image['pred'].data[:, :, slice], -1).copy()
+            pred *= 255
+            pred = np.max([pred, img_gray], axis = 0)
+            img[:, :, 2] = pred
+
+        qimg = QImage(img, image.dim[0], image.dim[1], QImage.Format_RGB888)
         qpix = QPixmap(qimg)
         scale = image.spacing[1] / image.spacing[0]
         qpix = qpix.scaled(QSize(384 / max(scale, 1), 384 * min(scale, 1)), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
         qlabel.setPixmap(qpix)
 
-    def plotAll(self, slice):
-        self.plotImage(self.image_manager.image['flair'], slice)
-        self.plotImage(self.image_manager.image['t1'], slice)
-        self.plotImage(self.image_manager.image['t1ce'], slice)
-        self.plotImage(self.image_manager.image['t2'], slice)
+    def plotAll(self):
+        self.plotImage(self.image_manager.image['flair'], self.slice)
+        self.plotImage(self.image_manager.image['t1'], self.slice)
+        self.plotImage(self.image_manager.image['t1ce'], self.slice)
+        self.plotImage(self.image_manager.image['t2'], self.slice)
 
     def sliderValueChanged(self, value):
         # print(value)
         if not self.image_loaded:
             return
-        self.plotAll(value - 1)
+        self.slice = value - 1
+        self.plotAll()
         self.label_slice.setText('Current slice: ' + str(value))
 
 
