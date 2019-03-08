@@ -225,6 +225,13 @@
           </widget>
          </item>
          <item>
+          <widget class="QLabel" name="label_dice">
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item>
           <spacer name="verticalSpacer">
            <property name="orientation">
             <enum>Qt::Vertical</enum>

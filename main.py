@@ -17,18 +17,17 @@ class Image():
         self.data = np.array(nii_image.get_data())
         self.max = np.max(self.data)
         self.min = np.min(self.data)
-        if name in ['flair', 't1', 't1ce', 't2']:
+        if self.name in ['flair', 't1', 't1ce', 't2', 'truth', 'pred']:
             self.toCharData()
         print(self.name, self.dim, self.dtype, self.spacing, self.max, self.min)
 
     def toCharData(self):
         self.char_data = self.data.copy()
         self.char_data -= self.min
-        self.char_data *= 255 / (0.0001 + self.max - self.min)
+        if self.name in ['flair', 't1', 't1ce', 't2']:
+            self.char_data *= 255 / (self.max - self.min)
         self.char_data = self.char_data.astype(np.uint8)
         # print(self.char_data)
-
-
 
 class ImageManager():
     def __init__(self, main_window):
@@ -44,8 +43,8 @@ class ImageManager():
             't1': os.path.join(self.path, 'data_t1.nii.gz'),
             't1ce': os.path.join(self.path, 'data_t1ce.nii.gz'),
             't2': os.path.join(self.path, 'data_t2.nii.gz'),
-            'truth': os.path.join(self.path, 'truth_124.nii'),
-            'pred': os.path.join(self.path, 'prediction_124.nii')
+            'truth': os.path.join(self.path, 'truth.nii.gz'),
+            'pred': os.path.join(self.path, 'prediction.nii.gz')
         }
         # 不符合条件则返回并提示
         self.image_file = dict()
@@ -74,7 +73,7 @@ class ImageManager():
         # 然后显示中间的切片，允许响应用户操作
         self.main_window.image_loaded = True
         self.main_window.sliderValueChanged(self.main_window.slider.value())
-
+        self.main_window.calculateDice()
 
 class Viewer(QLabel):
     mousemove = pyqtSignal(QEvent)
@@ -184,7 +183,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if event.isAutoRepeat():
             return
         if event.key() == Qt.Key_O:
-            path = 'sample_Brats18_2013_0_1'
+            path = 'Brats18_CBICA_ABB_1'
             self.image_manager.openProject(path)
         if event.key() == Qt.Key_Escape:
             self.close()
@@ -259,12 +258,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         img_gray = np.rot90(image.char_data[:, :, slice], -1).copy()
         img = np.stack((img_gray,) * 3, axis = -1)
         if self.show_gt:
-            gt = np.rot90(self.image_manager.image['truth'].data[:, :, slice], -1).copy()
+            gt = np.rot90(self.image_manager.image['truth'].char_data[:, :, slice], -1).copy()
             gt *= 255
             gt = np.max([gt, img_gray], axis = 0)
             img[:, :, 0] = gt
         if self.show_pred:
-            pred = np.rot90(self.image_manager.image['pred'].data[:, :, slice], -1).copy()
+            pred = np.rot90(self.image_manager.image['pred'].char_data[:, :, slice], -1).copy()
             pred *= 255
             pred = np.max([pred, img_gray], axis = 0)
             img[:, :, 2] = pred
@@ -289,6 +288,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.plotAll()
         self.label_slice.setText('Current slice: ' + str(value))
 
+    def calculateDice(self):
+        gt = self.image_manager.image['truth'].char_data.astype(np.float)
+        pred = self.image_manager.image['pred'].char_data.astype(np.float)
+        dice = 2 * sum(sum(sum(gt * pred))) / (sum(sum(sum(gt))) + sum(sum(sum(pred))))
+        self.label_dice.setText('Dice coefficient: ' + str(round(dice, 3)))
 
 if __name__ == '__main__':
     app = QApplication([])
