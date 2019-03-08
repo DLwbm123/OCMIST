@@ -71,9 +71,7 @@ class ImageManager():
         #     else:
         #         pass
         # 然后显示中间的切片，允许响应用户操作
-        self.main_window.image_loaded = True
-        self.main_window.sliderValueChanged(self.main_window.slider.value())
-        self.main_window.calculateDice()
+        self.main_window.loadFinished()
 
 class Viewer(QLabel):
     mousemove = pyqtSignal(QEvent)
@@ -140,6 +138,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
         self.setupUi(self)
+
+        self.container_score.setVisible(False)
 
         self.image_loaded = False
         self.image_manager = ImageManager(self)
@@ -288,11 +288,45 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.plotAll()
         self.label_slice.setText('Current slice: ' + str(value))
 
-    def calculateDice(self):
+    def calculateDiceJaccardPrecisionRecall(self):
         gt = self.image_manager.image['truth'].char_data.astype(np.float)
         pred = self.image_manager.image['pred'].char_data.astype(np.float)
-        dice = 2 * sum(sum(sum(gt * pred))) / (sum(sum(sum(gt))) + sum(sum(sum(pred))))
-        self.label_dice.setText('Dice coefficient: ' + str(round(dice, 3)))
+        TP = np.sum(gt * pred)
+        FN = np.sum((gt - pred > 0).astype(np.float))
+        FP = np.sum((gt - pred < 0).astype(np.float))
+        SGT = np.sum(gt)
+        SPRED = np.sum(pred)
+        dice = 2 * TP / (SGT + SPRED)
+        jaccard = TP / (SGT + SPRED - TP)
+        precision = TP / (TP + FP)
+        recall = TP / (TP + FN)
+        self.label_dice.setText('Dice: ' + str(round(dice, 3)))
+        self.label_jaccard.setText('Jaccard: ' + str(round(jaccard, 3)))
+        self.label_precision.setText('Precision: ' + str(round(precision, 3)))
+        self.label_recall.setText('Recall: ' + str(round(recall, 3)))
+        TP = round(TP, 2) * 100
+        FN = round(FN, 2) * 100
+        FP = round(FP, 2) * 100
+        s = [FP, TP, TP, FN]
+        for i in range(4):
+            self.bar_dice.setStretch(i, s[i])
+        s = [FP, TP, FN]
+        for i in range(3):
+            self.bar_jaccard.setStretch(i, s[i])
+        s = [FP, TP]
+        for i in range(2):
+            self.bar_precision.setStretch(i, s[i])
+        s = [TP, FN]
+        for i in range(2):
+            self.bar_recall.setStretch(i, s[i])
+
+    def loadFinished(self):
+        self.image_loaded = True
+        self.sliderValueChanged(self.slider.value())
+        self.calculateDiceJaccardPrecisionRecall()
+        self.container_score.setVisible(True)
+
+
 
 if __name__ == '__main__':
     app = QApplication([])
