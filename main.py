@@ -140,6 +140,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
 
         self.container_score.setVisible(False)
+        self.container_cor.setVisible(False)
+        self.container_sag.setVisible(False)
 
         self.image_loaded = False
         self.image_manager = ImageManager(self)
@@ -253,32 +255,54 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if name == 't2':
             return self.viewer_t2
 
-    def plotImage(self, image, slice):
-        qlabel = self.getViewer(image.name)
-        img_gray = np.rot90(image.char_data[:, :, slice], -1).copy()
+    def plotImage(self, image, slice, direction = 'axi', size = 384):
+        if direction == 'axi':
+            qlabel = self.getViewer(image.name)
+            img_gray = np.rot90(image.char_data[:, :, slice], -1).copy()
+        elif direction == 'sag':
+            qlabel = self.label_sag
+            img_gray = np.rot90(image.char_data[:, slice, :]).copy()
+        elif direction == 'cor':
+            qlabel = self.label_cor
+            img_gray = np.rot90(image.char_data[slice, :, :]).copy()
+
         img = np.stack((img_gray,) * 3, axis = -1)
-        if self.show_gt:
+        if direction == 'axi' and self.show_gt:
             gt = np.rot90(self.image_manager.image['truth'].char_data[:, :, slice], -1).copy()
             gt *= 255
             gt = np.max([gt, img_gray], axis = 0)
             img[:, :, 0] = gt
-        if self.show_pred:
+        if direction == 'axi' and self.show_pred:
             pred = np.rot90(self.image_manager.image['pred'].char_data[:, :, slice], -1).copy()
             pred *= 255
             pred = np.max([pred, img_gray], axis = 0)
             img[:, :, 2] = pred
+        if direction != 'axi':
+            img[-1 - self.slice, :, 1] = 255
 
         qimg = QImage(img, image.dim[0], image.dim[1], QImage.Format_RGB888)
         qpix = QPixmap(qimg)
-        scale = image.spacing[1] / image.spacing[0]
-        qpix = qpix.scaled(QSize(384 / max(scale, 1), 384 * min(scale, 1)), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        if direction == 'axi':
+            scale = image.spacing[1] / image.spacing[0]
+        if direction == 'sag':
+            scale = image.spacing[1] / image.spacing[2]
+        if direction == 'cor':
+            scale = image.spacing[0] / image.spacing[2]
+
+        qpix = qpix.scaled(QSize(size / max(scale, 1), size * min(scale, 1)), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
         qlabel.setPixmap(qpix)
+
+    def plotSagCor(self):
+        # 在界面左侧显示另外两个方向的切片
+        self.plotImage(self.image_manager.image['t1'], 64, direction = 'sag', size = 128)
+        self.plotImage(self.image_manager.image['t1'], 64, direction = 'cor', size = 128)
 
     def plotAll(self):
         self.plotImage(self.image_manager.image['flair'], self.slice)
         self.plotImage(self.image_manager.image['t1'], self.slice)
         self.plotImage(self.image_manager.image['t1ce'], self.slice)
         self.plotImage(self.image_manager.image['t2'], self.slice)
+        self.plotSagCor()
 
     def sliderValueChanged(self, value):
         # print(value)
@@ -325,6 +349,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.sliderValueChanged(self.slider.value())
         self.calculateDiceJaccardPrecisionRecall()
         self.container_score.setVisible(True)
+        self.container_sag.setVisible(True)
+        self.container_cor.setVisible(True)
 
 
 
