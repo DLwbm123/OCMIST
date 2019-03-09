@@ -8,6 +8,11 @@ import os
 import nibabel as nib
 import numpy as np
 
+VIEWER_SIZE = 384
+IMAGE_SIZE = 128
+MINI_VIEWER_SIZE = 160
+
+
 class Image():
     def __init__(self, nii_image, name):
         self.name = name
@@ -56,6 +61,9 @@ class ImageManager():
             else:
                 QMessageBox.information(self.main_window, 'Information', f + ' file does not exist.', QMessageBox.Ok)
                 return
+        # 读取现有mark文件并写入到main_window.mark里
+        self.main_window.mark = [list() for x in range(IMAGE_SIZE)]
+
         # 检查如果有up{1, 2, 4}.nii则加载，没有则创建空的
         # self.edit_file = dict()
         # self.edit = dict()
@@ -71,11 +79,13 @@ class ImageManager():
         #     else:
         #         pass
         # 然后显示中间的切片，允许响应用户操作
+        self.main_window.statusBar.showMessage('Project loaded: ' + path)
         self.main_window.loadFinished()
 
 class Viewer(QLabel):
     mousemove = pyqtSignal(QEvent)
     mouseleave = pyqtSignal()
+    mousepress = pyqtSignal(QEvent)
 
     def __init__(self, parent):
         super(Viewer, self).__init__(parent)
@@ -87,6 +97,9 @@ class Viewer(QLabel):
         #     pass
         # else:
         #     print(event.x(), event.y())
+
+    def mousePressEvent(self, event):
+        self.mousepress.emit(event)
 
     def leaveEvent(self, event):
         self.mouseleave.emit()
@@ -133,7 +146,6 @@ class Mask():
             return
         self.img[x, y] = color
 
-
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, *args, **kwargs):
         super(MainWindow, self).__init__(*args, **kwargs)
@@ -153,14 +165,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.button_open.pressed.connect(self.actionOpenProject)
         self.button_pred.pressed.connect(self.switchShowPred)
         self.button_gt.pressed.connect(self.switchShowGt)
-        self.viewer_t1.mousemove.connect(self.viewerMouseMove)
-        self.viewer_t1ce.mousemove.connect(self.viewerMouseMove)
-        self.viewer_t2.mousemove.connect(self.viewerMouseMove)
-        self.viewer_flair.mousemove.connect(self.viewerMouseMove)
-        self.viewer_t1.mouseleave.connect(self.viewerMouseLeave)
-        self.viewer_t1ce.mouseleave.connect(self.viewerMouseLeave)
-        self.viewer_t2.mouseleave.connect(self.viewerMouseLeave)
-        self.viewer_flair.mouseleave.connect(self.viewerMouseLeave)
+        for v in [self.viewer_t1, self.viewer_t1ce, self.viewer_t2, self.viewer_flair]:
+            v.mousemove.connect(self.viewerMouseMove)
+            v.mouseleave.connect(self.viewerMouseLeave)
+            v.mousepress.connect(self.viewerMousePress)
 
         ### Setup actions
         self.action_open.triggered.connect(self.actionOpenProject)
@@ -226,6 +234,40 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.mask[m].cross = [-100, -100]
             self.mask[m].paint()
 
+    def viewerMousePress(self, event):
+        if not self.image_loaded:
+            return
+        if event.button() == Qt.LeftButton:
+            m = '+'
+        elif event.button() == Qt.RightButton:
+            m = '-'
+        else:
+            return
+        self.addTemporaryMark(event.y(), event.x(), m)
+
+    def addTemporaryMark(self, screeny, screenx, mark):
+        # 首先转换为以viewer中心为原点
+        screeny -= VIEWER_SIZE / 2
+        screenx -= VIEWER_SIZE / 2
+        # 然后转换为图像的坐标
+        image = self.image_manager.image['t1']
+        scale = image.spacing[1] / image.spacing[0]
+        w = VIEWER_SIZE / max(scale, 1)
+        h = VIEWER_SIZE * min(scale, 1)
+        imagey = int(round((screeny / h + 0.5) * IMAGE_SIZE))
+        imagex = int(round((screenx / w + 0.5) * IMAGE_SIZE))
+        if imagex < 0 or imagey < 0 or imagex >= IMAGE_SIZE or imagey >= IMAGE_SIZE:
+            return
+        imagez = self.slice
+        self.mark[imagez].append({
+            'x': imagex,
+            'y': imagey,
+            'z': imagez,
+            'm': mark
+        })
+        self.plotAll()
+        print(imagex, imagey, imagez, mark)
+
     def addOverlays(self):
         self.mask = dict()
         self.mask['t1'] = Mask(self.viewer_t1)
@@ -255,16 +297,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if name == 't2':
             return self.viewer_t2
 
-    def plotImage(self, image, slice, direction = 'axi', size = 384):
+    def plotImage(self, image, slice, direction = 'axi', size = VIEWER_SIZE):
         if direction == 'axi':
             qlabel = self.getViewer(image.name)
             img_gray = np.rot90(image.char_data[:, :, slice], -1).copy()
         elif direction == 'sag':
             qlabel = self.label_sag
-            img_gray = np.rot90(image.char_data[:, slice, :]).copy()
+            img_gray = np.flip(np.rot90(image.char_data[:, slice, :]), axis = 1).copy()
         elif direction == 'cor':
             qlabel = self.label_cor
-            img_gray = np.rot90(image.char_data[slice, :, :]).copy()
+            img_gray = np.flip(np.rot90(image.char_data[slice, :, :]), axis = 1).copy()
 
         img = np.stack((img_gray,) * 3, axis = -1)
         if direction == 'axi' and self.show_gt:
@@ -277,6 +319,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             pred *= 255
             pred = np.max([pred, img_gray], axis = 0)
             img[:, :, 2] = pred
+        if direction == 'axi':
+            for m in self.mark[slice]:
+                self.drawMark(img, m['y'], m['x'], m['m'])
         if direction != 'axi':
             img[-1 - self.slice, :, 1] = 255
 
@@ -285,17 +330,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if direction == 'axi':
             scale = image.spacing[1] / image.spacing[0]
         if direction == 'sag':
-            scale = image.spacing[1] / image.spacing[2]
+            scale = image.spacing[2] / image.spacing[0]
         if direction == 'cor':
-            scale = image.spacing[0] / image.spacing[2]
+            scale = image.spacing[2] / image.spacing[1]
 
         qpix = qpix.scaled(QSize(size / max(scale, 1), size * min(scale, 1)), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
         qlabel.setPixmap(qpix)
 
     def plotSagCor(self):
         # 在界面左侧显示另外两个方向的切片
-        self.plotImage(self.image_manager.image['t1'], 64, direction = 'sag', size = 128)
-        self.plotImage(self.image_manager.image['t1'], 64, direction = 'cor', size = 128)
+        self.plotImage(self.image_manager.image['t1'], 64, direction = 'sag', size = MINI_VIEWER_SIZE)
+        self.plotImage(self.image_manager.image['t1'], 64, direction = 'cor', size = MINI_VIEWER_SIZE)
 
     def plotAll(self):
         self.plotImage(self.image_manager.image['flair'], self.slice)
@@ -303,6 +348,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.plotImage(self.image_manager.image['t1ce'], self.slice)
         self.plotImage(self.image_manager.image['t2'], self.slice)
         self.plotSagCor()
+
+    def drawMark(self, img, y, x, m):
+        for i in range(x - 2, x + 3):
+            if i >= 0 and i < IMAGE_SIZE:
+                img[y][i] = [0, 255, 0]
+        if m == '+':
+            for i in range(y - 2, y + 3):
+                if i >= 0 and i < IMAGE_SIZE:
+                    img[i][x] = [0, 255, 0]
+
 
     def sliderValueChanged(self, value):
         # print(value)
