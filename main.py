@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 
 from MainWindow import Ui_MainWindow
+from prediction import predict_one, prediction_to_image, load_trained_model
 
 import os
 import nibabel as nib
@@ -20,6 +21,7 @@ class Image():
         self.dtype = nii_image.header.get_data_dtype()
         self.spacing = nii_image.header.get_zooms()
         self.data = np.array(nii_image.get_data())
+        self.affine = nii_image.affine
         self.max = np.max(self.data)
         self.min = np.min(self.data)
         if self.name in ['flair', 't1', 't1ce', 't2', 'truth', 'pred']:
@@ -38,6 +40,7 @@ class ImageManager():
     def __init__(self, main_window):
         self.path = ''
         self.main_window = main_window
+        self.model = load_trained_model()
 
     def openProject(self, path):
         self.path = path
@@ -61,7 +64,9 @@ class ImageManager():
             else:
                 QMessageBox.information(self.main_window, 'Information', f + ' file does not exist.', QMessageBox.Ok)
                 return
+
         # 读取现有mark文件并写入到main_window.mark里
+        self.main_window.tmp_mark = [list() for x in range(IMAGE_SIZE)]
         self.main_window.mark = [list() for x in range(IMAGE_SIZE)]
 
         # 检查如果有up{1, 2, 4}.nii则加载，没有则创建空的
@@ -81,6 +86,35 @@ class ImageManager():
         # 然后显示中间的切片，允许响应用户操作
         self.main_window.statusBar.showMessage('Project loaded: ' + path)
         self.main_window.loadFinished()
+
+    def createEditImage(self, mark):
+        self.edit = np.zeros([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
+        for n in mark:
+            for m in n:
+                x = m['x']
+                y = m['y']
+                z = m['z']
+                for i in range(x - 1, x + 2):
+                    for j in range(y - 1, y + 2):
+                        for k in range(z - 1, z + 2):
+                            if i >= 0 and j >= 0 and k >= 0 and i < IMAGE_SIZE and j < IMAGE_SIZE and k < IMAGE_SIZE:
+                                self.edit[i, j, k] = 1 if m['m'] == '+' else -1
+        self.edit *= 316.685 # magic
+
+    def predict(self):
+        # prepare data:
+        affine = self.image['t1'].affine
+        data = [
+            self.image['t1'].data,
+            self.image['t1ce'].data,
+            self.image['flair'].data,
+            self.image['t2'].data,
+            self.edit
+        ]
+        # 还需要加上用户交互数据
+        prediction = predict_one(self.model, data, affine)
+        nii_image = prediction_to_image(prediction, affine, labels = (1,), label_map = True)
+        nii_image.to_filename('test.nii.gz')
 
 class Viewer(QLabel):
     mousemove = pyqtSignal(QEvent)
@@ -165,6 +199,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.button_open.pressed.connect(self.actionOpenProject)
         self.button_pred.pressed.connect(self.switchShowPred)
         self.button_gt.pressed.connect(self.switchShowGt)
+        self.button_confirm.pressed.connect(self.confirmMark)
+        self.button_revert.pressed.connect(self.revertMark)
         for v in [self.viewer_t1, self.viewer_t1ce, self.viewer_t2, self.viewer_flair]:
             v.mousemove.connect(self.viewerMouseMove)
             v.mouseleave.connect(self.viewerMouseLeave)
@@ -259,7 +295,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if imagex < 0 or imagey < 0 or imagex >= IMAGE_SIZE or imagey >= IMAGE_SIZE:
             return
         imagez = self.slice
-        self.mark[imagez].append({
+        self.tmp_mark[imagez].append({
             'x': imagex,
             'y': imagey,
             'z': imagez,
@@ -267,6 +303,24 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         })
         self.plotAll()
         print(imagex, imagey, imagez, mark)
+
+    def confirmMark(self):
+        if not self.image_loaded:
+            return
+        # 将当前self.tmp_mark里的数据全部转移至self.mark
+        for i in range(IMAGE_SIZE):
+            self.mark[i] += self.tmp_mark[i]
+            self.tmp_mark[i] = list()
+        # 然后计算这一部分
+        self.image_manager.createEditImage(self.mark)
+        self.image_manager.predict()
+
+    def revertMark(self):
+        if not self.image_loaded:
+            return
+        for i in range(IMAGE_SIZE):
+            self.tmp_mark[i] = list()
+        self.plotAll()
 
     def addOverlays(self):
         self.mask = dict()
@@ -280,10 +334,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.image_manager.openProject(path)
 
     def switchShowGt(self):
+        if not self.image_loaded:
+            return
         self.show_gt ^= True
         self.plotAll()
 
     def switchShowPred(self):
+        if not self.image_loaded:
+            return
         self.show_pred ^= True
         self.plotAll()
 
@@ -320,6 +378,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             pred = np.max([pred, img_gray], axis = 0)
             img[:, :, 2] = pred
         if direction == 'axi':
+            for m in self.tmp_mark[slice]:
+                self.drawMark(img, m['y'], m['x'], m['m'])
             for m in self.mark[slice]:
                 self.drawMark(img, m['y'], m['x'], m['m'])
         if direction != 'axi':
