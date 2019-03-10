@@ -8,6 +8,7 @@ from prediction import predict_one, prediction_to_image, load_trained_model
 import os
 import nibabel as nib
 import numpy as np
+import time
 
 VIEWER_SIZE = 384
 IMAGE_SIZE = 128
@@ -91,7 +92,7 @@ class ImageManager():
         self.edit = np.zeros([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
         for n in mark:
             for m in n:
-                x = m['x']
+                x = IMAGE_SIZE - 1 - m['x'] # 空间需要翻转一下
                 y = m['y']
                 z = m['z']
                 for i in range(x - 1, x + 2):
@@ -113,8 +114,16 @@ class ImageManager():
         ]
         # 还需要加上用户交互数据
         prediction = predict_one(self.model, data, affine)
-        nii_image = prediction_to_image(prediction, affine, labels = (1,), label_map = True)
-        nii_image.to_filename('test.nii.gz')
+        self.image_file['pred'] = prediction_to_image(prediction, affine, labels = (1,), label_map = True)
+        self.image['pred'] = Image(self.image_file['pred'], 'pred')
+        self.main_window.plotAll()
+        self.main_window.calculateDiceJaccardPrecisionRecall()
+
+    def savePrediction(self):
+        t = time.strftime("%Y%m%d%H%M%S", time.localtime())
+        path = os.path.join(self.path, 'prediction_' + t + '.nii.gz')
+        self.image_file['pred'].to_filename(path)
+        QMessageBox.information(self.main_window, 'Information', 'Prediction saved to ' + path, QMessageBox.Ok)
 
 class Viewer(QLabel):
     mousemove = pyqtSignal(QEvent)
@@ -201,6 +210,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.button_gt.pressed.connect(self.switchShowGt)
         self.button_confirm.pressed.connect(self.confirmMark)
         self.button_revert.pressed.connect(self.revertMark)
+        self.button_save.pressed.connect(self.image_manager.savePrediction)
         for v in [self.viewer_t1, self.viewer_t1ce, self.viewer_t2, self.viewer_flair]:
             v.mousemove.connect(self.viewerMouseMove)
             v.mouseleave.connect(self.viewerMouseLeave)

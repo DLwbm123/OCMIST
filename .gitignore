@@ -4,3 +4,4 @@ __pycache__/
 Brats18_CBICA_ABB_1_up/
 Brats18_2013_22_1_naive/
 Brats18_2013_22_1_up/
+*.h5
