@@ -70,20 +70,6 @@ class ImageManager():
         self.main_window.tmp_mark = [list() for x in range(IMAGE_SIZE)]
         self.main_window.mark = [list() for x in range(IMAGE_SIZE)]
 
-        # 检查如果有up{1, 2, 4}.nii则加载，没有则创建空的
-        # self.edit_file = dict()
-        # self.edit = dict()
-        # self.edit_path = {
-        #     'up1': os.path.join(self.path, 'up1.nii'),
-        #     'up2': os.path.join(self.path, 'up2.nii'),
-        #     'up4': os.path.join(self.path, 'up4.nii')
-        # }
-        # for f in self.edit_path:
-        #     if os.path.isfile(self.edit_path[f]):
-        #         self.edit_file[f] = nib.load(self.edit_path[f])
-        #         self.edit[f] = Image(self.edit_file[f], f)
-        #     else:
-        #         pass
         # 然后显示中间的切片，允许响应用户操作
         self.main_window.statusBar.showMessage('Project loaded: ' + path)
         self.main_window.loadFinished()

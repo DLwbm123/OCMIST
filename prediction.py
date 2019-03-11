@@ -4,7 +4,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 import numpy as np
 import time
-import tables
+# import tables
 
 from keras import backend as K
 from keras.models import load_model
@@ -51,6 +51,6 @@ def load_trained_model():
     custom_objects["InstanceNormalization"] = InstanceNormalization
     start = time.time()
     print('load model')
-    model = load_model('../brats_comb_up/isensee_2017_model.h5', custom_objects=custom_objects)
+    model = load_model('model.h5', custom_objects=custom_objects)
     print('model loaded', time.time() - start)
     return model
