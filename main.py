@@ -68,6 +68,7 @@ class ImageManager():
 
         # 读取现有mark文件并写入到main_window.mark里
         self.main_window.mark = [list() for x in range(IMAGE_SIZE)]
+        self.main_window.resize_level = 0
 
         # 然后显示中间的切片，允许响应用户操作
         self.main_window.statusBar.showMessage('Project loaded: ' + path)
@@ -87,6 +88,11 @@ class ImageManager():
                                 self.edit[i, j, k] = 1 if m['m'] == '+' else -1
         self.edit *= 316.685 # magic
 
+    def createAdjustImage(self, level):
+        self.adjust = np.ones([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
+        self.adjust *= level / 3 # magic
+        self.adjust -= 0.04 # magic
+
     def predict(self):
         # prepare data:
         affine = self.image['t1'].affine
@@ -95,7 +101,8 @@ class ImageManager():
             self.image['t1ce'].data,
             self.image['flair'].data,
             self.image['t2'].data,
-            self.edit
+            # self.edit
+            self.adjust
         ]
         # 还需要加上用户交互数据
         prediction = predict_one(self.model, data, affine)
@@ -217,15 +224,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def wheelEvent(self, event):
         if not self.image_loaded:
             return
-        v = self.slider.value()
-        if event.angleDelta().y() > 0:
-            v += 1
-        elif event.angleDelta().y() < 0:
-            v -= 1
-        v = min(v, self.slider.maximum())
-        v = max(v, self.slider.minimum())
-        self.slider.setValue(v)
-        self.sliderValueChanged(v)
+        if event.modifiers() & Qt.ControlModifier:
+            self.resize_level += 1 if event.angleDelta().y() > 0 else -1
+            # self.resize_level = min(self.resize_level, 5)
+            # self.resize_level = max(self.resize_level, -5)
+            self.updateResizeLevel()
+        else:
+            v = self.slider.value()
+            v += 1 if event.angleDelta().y() > 0 else -1
+            v = min(v, self.slider.maximum())
+            v = max(v, self.slider.minimum())
+            self.slider.setValue(v)
+            self.sliderValueChanged(v)
 
     def keyPressEvent(self, event):
         if event.isAutoRepeat():
@@ -316,7 +326,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             'data': m
         })
         self.plotAll()
+        self.updateNumberOfMarks()
         print(imagex, imagey, imagez, mark)
+
+    def shrink(self):
+        self.resize_level -= 1.0
+
+
+    def extend(self):
+        self.resize_level += 1.0
 
     def apply(self):
         if not self.image_loaded:
@@ -326,7 +344,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #     self.mark[i] += self.tmp_mark[i]
         #     self.tmp_mark[i] = list()
         # 然后计算这一部分
-        self.image_manager.createEditImage(self.mark)
+
+        # self.image_manager.createEditImage(self.mark)
+        self.image_manager.createAdjustImage(self.resize_level)
         self.image_manager.predict()
 
     def undo(self):
@@ -339,6 +359,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             z = o['data']['z']
             self.mark[z].pop()
             self.plotAll()
+            self.updateNumberOfMarks()
         if o['operation'] == 'adjust':
             pass
         self.operations.pop()
@@ -481,6 +502,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.bar_recall.setStretch(i, s[i])
         return [dice, jaccard, precision, recall]
 
+    def updateNumberOfMarks(self):
+        count = 0
+        for i in self.mark:
+            count += len(i)
+        self.label_mark.setText('Number of marks: ' + str(count))
+
+    def updateResizeLevel(self):
+        self.label_resize.setText('Resize level: ' + str(self.resize_level))
+
     def loadFinished(self):
         self.image_loaded = True
         self.sliderValueChanged(self.slider.value())
@@ -489,8 +519,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.container_sag.setVisible(True)
         self.container_cor.setVisible(True)
         self.operations = list()
-
-
+        self.updateNumberOfMarks()
+        self.updateResizeLevel()
 
 if __name__ == '__main__':
     app = QApplication([])

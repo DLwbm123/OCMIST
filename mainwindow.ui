@@ -423,6 +423,20 @@
            </spacer>
           </item>
           <item>
+           <widget class="QLabel" name="label_mark">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_resize">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QLabel" name="label_slice">
             <property name="focusPolicy">
              <enum>Qt::NoFocus</enum>
