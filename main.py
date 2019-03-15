@@ -192,10 +192,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         ### Setup operations.
         self.slider.valueChanged.connect(self.sliderValueChanged)
         self.button_open.pressed.connect(self.actionOpenProject)
-        self.button_pred.pressed.connect(self.switchShowPred)
-        self.button_gt.pressed.connect(self.switchShowGt)
+        # self.button_pred.pressed.connect(self.switchShowPred)
+        # self.button_gt.pressed.connect(self.switchShowGt)
         self.button_confirm.pressed.connect(self.confirmMark)
-        self.button_revert.pressed.connect(self.revertMark)
+        self.button_undo.pressed.connect(self.undoMark)
         self.button_save.pressed.connect(self.image_manager.savePrediction)
         for v in [self.viewer_t1, self.viewer_t1ce, self.viewer_t2, self.viewer_flair]:
             v.mousemove.connect(self.viewerMouseMove)
@@ -204,6 +204,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         ### Setup actions
         self.action_open.triggered.connect(self.actionOpenProject)
+        self.action_save.triggered.connect(self.image_manager.savePrediction)
+        self.action_pred.triggered.connect(self.switchShowPred)
+        self.action_gt.triggered.connect(self.switchShowGt)
+        # self.action_extend.triggered.connect(self.extend)
+        # self.action_shrink.triggered.connect(self.shrink)
 
         self.addOverlays()
         self.show()
@@ -239,6 +244,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if event.key() == Qt.Key_Tab:
             self.show_gt ^= True
             self.plotAll()
+        if event.key() == Qt.Key_Enter or event.key() == Qt.Key_Return:
+            self.confirmMark()
+        if event.key() == Qt.Key_S:
+            self.image_manager.savePrediction()
+        if event.key() == Qt.Key_Backspace or event.key() == Qt.Key_Delete:
+            self.undoMark()
+
 
     def keyReleaseEvent(self, event):
         if event.isAutoRepeat():
@@ -311,7 +323,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.image_manager.createEditImage(self.mark)
         self.image_manager.predict()
 
-    def revertMark(self):
+    def undoMark(self):
         if not self.image_loaded:
             return
         for i in range(IMAGE_SIZE):
@@ -454,6 +466,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         s = [TP, FN]
         for i in range(2):
             self.bar_recall.setStretch(i, s[i])
+        return [dice, jaccard, precision, recall]
 
     def loadFinished(self):
         self.image_loaded = True

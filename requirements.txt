@@ -1,2 +1,5 @@
 PyQt5>=5.6
 nibabel
+keras
+tables
+numpy
