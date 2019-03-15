@@ -951,8 +951,8 @@
     <addaction name="action_extend"/>
     <addaction name="action_shrink"/>
     <addaction name="separator"/>
-    <addaction name="actionUndo"/>
-    <addaction name="actionApply"/>
+    <addaction name="action_undo"/>
+    <addaction name="action_apply"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
@@ -1006,7 +1006,7 @@
     <string>Ctrl+G</string>
    </property>
   </action>
-  <action name="actionUndo">
+  <action name="action_undo">
    <property name="text">
     <string>Undo</string>
    </property>
@@ -1014,7 +1014,7 @@
     <string>Ctrl+Z</string>
    </property>
   </action>
-  <action name="actionApply">
+  <action name="action_apply">
    <property name="text">
     <string>Apply</string>
    </property>

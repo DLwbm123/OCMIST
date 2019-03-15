@@ -16,7 +16,6 @@ numpy
 
 ### Installing
 
-
 ## Acknowledgments
 
-* @ellisdg's [3DUnetCNN][https://github.com/ellisdg/3DUnetCNN]
+* @ellisdg's [3DUnetCNN](https://github.com/ellisdg/3DUnetCNN])

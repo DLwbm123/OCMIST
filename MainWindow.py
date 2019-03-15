@@ -395,10 +395,10 @@ class Ui_MainWindow(object):
         self.action_shrink.setObjectName("action_shrink")
         self.action_gt = QtWidgets.QAction(MainWindow)
         self.action_gt.setObjectName("action_gt")
-        self.actionUndo = QtWidgets.QAction(MainWindow)
-        self.actionUndo.setObjectName("actionUndo")
-        self.actionApply = QtWidgets.QAction(MainWindow)
-        self.actionApply.setObjectName("actionApply")
+        self.action_undo = QtWidgets.QAction(MainWindow)
+        self.action_undo.setObjectName("action_undo")
+        self.action_apply = QtWidgets.QAction(MainWindow)
+        self.action_apply.setObjectName("action_apply")
         self.menuFile.addAction(self.action_open)
         self.menuFile.addAction(self.action_save)
         self.menuView.addAction(self.action_pred)
@@ -406,8 +406,8 @@ class Ui_MainWindow(object):
         self.menuTool.addAction(self.action_extend)
         self.menuTool.addAction(self.action_shrink)
         self.menuTool.addSeparator()
-        self.menuTool.addAction(self.actionUndo)
-        self.menuTool.addAction(self.actionApply)
+        self.menuTool.addAction(self.action_undo)
+        self.menuTool.addAction(self.action_apply)
         self.menuBar.addAction(self.menuFile.menuAction())
         self.menuBar.addAction(self.menuView.menuAction())
         self.menuBar.addAction(self.menuTool.menuAction())
@@ -418,7 +418,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "OCMIST - One click medical image segmentation tool!"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "OCMIST: One-click medical image segmentation tool!"))
         self.button_open.setText(_translate("MainWindow", "Open"))
         self.button_save.setText(_translate("MainWindow", "Save"))
         self.button_undo.setText(_translate("MainWindow", "Undo"))
@@ -441,9 +441,9 @@ class Ui_MainWindow(object):
         self.action_shrink.setText(_translate("MainWindow", "Shrink"))
         self.action_gt.setText(_translate("MainWindow", "Show ground truth"))
         self.action_gt.setShortcut(_translate("MainWindow", "Ctrl+G"))
-        self.actionUndo.setText(_translate("MainWindow", "Undo"))
-        self.actionUndo.setShortcut(_translate("MainWindow", "Ctrl+Z"))
-        self.actionApply.setText(_translate("MainWindow", "Apply"))
-        self.actionApply.setShortcut(_translate("MainWindow", "Return"))
+        self.action_undo.setText(_translate("MainWindow", "Undo"))
+        self.action_undo.setShortcut(_translate("MainWindow", "Ctrl+Z"))
+        self.action_apply.setText(_translate("MainWindow", "Apply"))
+        self.action_apply.setShortcut(_translate("MainWindow", "Return"))
 
 from main import Viewer

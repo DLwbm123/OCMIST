@@ -67,7 +67,6 @@ class ImageManager():
                 return
 
         # 读取现有mark文件并写入到main_window.mark里
-        self.main_window.tmp_mark = [list() for x in range(IMAGE_SIZE)]
         self.main_window.mark = [list() for x in range(IMAGE_SIZE)]
 
         # 然后显示中间的切片，允许响应用户操作
@@ -194,8 +193,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.button_open.pressed.connect(self.actionOpenProject)
         # self.button_pred.pressed.connect(self.switchShowPred)
         # self.button_gt.pressed.connect(self.switchShowGt)
-        self.button_confirm.pressed.connect(self.confirmMark)
-        self.button_undo.pressed.connect(self.undoMark)
+        self.button_confirm.pressed.connect(self.apply)
+        self.button_undo.pressed.connect(self.undo)
         self.button_save.pressed.connect(self.image_manager.savePrediction)
         for v in [self.viewer_t1, self.viewer_t1ce, self.viewer_t2, self.viewer_flair]:
             v.mousemove.connect(self.viewerMouseMove)
@@ -207,6 +206,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_save.triggered.connect(self.image_manager.savePrediction)
         self.action_pred.triggered.connect(self.switchShowPred)
         self.action_gt.triggered.connect(self.switchShowGt)
+        self.action_undo.triggered.connect(self.undo)
+        self.action_apply.triggered.connect(self.apply)
         # self.action_extend.triggered.connect(self.extend)
         # self.action_shrink.triggered.connect(self.shrink)
 
@@ -244,12 +245,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if event.key() == Qt.Key_Tab:
             self.show_gt ^= True
             self.plotAll()
-        if event.key() == Qt.Key_Enter or event.key() == Qt.Key_Return:
-            self.confirmMark()
-        if event.key() == Qt.Key_S:
-            self.image_manager.savePrediction()
-        if event.key() == Qt.Key_Backspace or event.key() == Qt.Key_Delete:
-            self.undoMark()
+        # if event.key() == Qt.Key_Enter or event.key() == Qt.Key_Return:
+        #     self.apply()
+        # if event.key() == Qt.Key_S:
+        #     self.image_manager.savePrediction()
+        # if event.key() == Qt.Key_Backspace or event.key() == Qt.Key_Delete:
+        #     self.undo()
 
 
     def keyReleaseEvent(self, event):
@@ -287,9 +288,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             m = '-'
         else:
             return
-        self.addTemporaryMark(event.y(), event.x(), m)
+        self.addMark(event.y(), event.x(), m)
 
-    def addTemporaryMark(self, screeny, screenx, mark):
+    def addMark(self, screeny, screenx, mark):
         # 首先转换为以viewer中心为原点
         screeny -= VIEWER_SIZE / 2
         screenx -= VIEWER_SIZE / 2
@@ -303,32 +304,44 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if imagex < 0 or imagey < 0 or imagex >= IMAGE_SIZE or imagey >= IMAGE_SIZE:
             return
         imagez = self.slice
-        self.tmp_mark[imagez].append({
+        m = {
             'x': imagex,
             'y': imagey,
             'z': imagez,
             'm': mark
+        }
+        self.mark[imagez].append(m)
+        self.operations.append({
+            'operation': 'mark',
+            'data': m
         })
         self.plotAll()
         print(imagex, imagey, imagez, mark)
 
-    def confirmMark(self):
+    def apply(self):
         if not self.image_loaded:
             return
-        # 将当前self.tmp_mark里的数据全部转移至self.mark
-        for i in range(IMAGE_SIZE):
-            self.mark[i] += self.tmp_mark[i]
-            self.tmp_mark[i] = list()
+        # # 将当前self.tmp_mark里的数据全部转移至self.mark
+        # for i in range(IMAGE_SIZE):
+        #     self.mark[i] += self.tmp_mark[i]
+        #     self.tmp_mark[i] = list()
         # 然后计算这一部分
         self.image_manager.createEditImage(self.mark)
         self.image_manager.predict()
 
-    def undoMark(self):
+    def undo(self):
         if not self.image_loaded:
             return
-        for i in range(IMAGE_SIZE):
-            self.tmp_mark[i] = list()
-        self.plotAll()
+        if len(self.operations) == 0:
+            return
+        o = self.operations[-1]
+        if o['operation'] == 'mark':
+            z = o['data']['z']
+            self.mark[z].pop()
+            self.plotAll()
+        if o['operation'] == 'adjust':
+            pass
+        self.operations.pop()
 
     def addOverlays(self):
         self.mask = dict()
@@ -339,6 +352,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def actionOpenProject(self):
         path = str(QFileDialog.getExistingDirectory(self, "Select Directory"))
+        if len(path) == 0:
+            return
         self.image_manager.openProject(path)
 
     def switchShowGt(self):
@@ -386,8 +401,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             pred = np.max([pred, img_gray], axis = 0)
             img[:, :, 2] = pred
         if direction == 'axi':
-            for m in self.tmp_mark[slice]:
-                self.drawMark(img, m['y'], m['x'], m['m'])
             for m in self.mark[slice]:
                 self.drawMark(img, m['y'], m['x'], m['m'])
         if direction != 'axi':
@@ -475,6 +488,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.container_score.setVisible(True)
         self.container_sag.setVisible(True)
         self.container_cor.setVisible(True)
+        self.operations = list()
 
 
 
