@@ -195,13 +195,14 @@ class Mask():
         self.w = self.mask.width()
         self.h = self.mask.height()
         self.cross = [-100, -100]
+        self.size = 0
         self.paint()
 
     def paint(self):
         self.img = np.zeros([self.w, self.h, 4], dtype=np.uint8)
 
         # draw code here
-        self.drawCross(self.cross, [170, 228, 184, 128])
+        self.drawCross(self.cross, [170, 228, 184, 128], self.size)
 
         qimg = QImage(self.img, self.w, self.h, self.w * 4, QImage.Format_RGBA8888)
         qpix = QPixmap(qimg)
@@ -240,6 +241,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.image_manager = ImageManager(self)
         self.show_gt = False
         self.show_pred = True
+
+        self.mouse_strength = 0
 
         ### Setup operations.
         self.slider.valueChanged.connect(self.sliderValueChanged)
@@ -306,6 +309,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if event.key() == Qt.Key_Tab:
             self.show_gt ^= True
             self.plotAll()
+        if event.key() == Qt.Key_Up:
+            self.mouse_strength = min(1, self.mouse_strength + 1)
+        if event.key() == Qt.Key_Down:
+            self.mouse_strength = max(-1, self.mouse_strength - 1)
         # if event.key() == Qt.Key_Enter or event.key() == Qt.Key_Return:
         #     self.apply()
         # if event.key() == Qt.Key_S:
@@ -332,6 +339,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         for m in self.mask:
             self.mask[m].cross = [event.y(), event.x()]
+            self.mask[m].size = self.mouse_strength
             self.mask[m].paint()
         imagey, imagex = self.screenToImage(event.y(), event.x())
         self.updateMousePosition(imagey, imagex)
