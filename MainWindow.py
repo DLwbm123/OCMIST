@@ -2,11 +2,12 @@
 
 # Form implementation generated from reading ui file 'mainwindow.ui'
 #
-# Created by: PyQt5 UI code generator 5.9.2
+# Created by: PyQt5 UI code generator 5.12
 #
 # WARNING! All changes made in this file will be lost!
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -176,6 +177,10 @@ class Ui_MainWindow(object):
         self.verticalLayout_7.addWidget(self.container_score)
         spacerItem2 = QtWidgets.QSpacerItem(20, 30, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
         self.verticalLayout_7.addItem(spacerItem2)
+        self.label_xy = QtWidgets.QLabel(self.widget)
+        self.label_xy.setText("")
+        self.label_xy.setObjectName("label_xy")
+        self.verticalLayout_7.addWidget(self.label_xy)
         self.label_mark = QtWidgets.QLabel(self.widget)
         self.label_mark.setText("")
         self.label_mark.setObjectName("label_mark")
@@ -407,6 +412,8 @@ class Ui_MainWindow(object):
         self.action_undo.setObjectName("action_undo")
         self.action_apply = QtWidgets.QAction(MainWindow)
         self.action_apply.setObjectName("action_apply")
+        self.action_calculate_box = QtWidgets.QAction(MainWindow)
+        self.action_calculate_box.setObjectName("action_calculate_box")
         self.menuFile.addAction(self.action_open)
         self.menuFile.addAction(self.action_save)
         self.menuView.addAction(self.action_pred)
@@ -416,6 +423,7 @@ class Ui_MainWindow(object):
         self.menuTool.addSeparator()
         self.menuTool.addAction(self.action_undo)
         self.menuTool.addAction(self.action_apply)
+        self.menuTool.addAction(self.action_calculate_box)
         self.menuBar.addAction(self.menuFile.menuAction())
         self.menuBar.addAction(self.menuView.menuAction())
         self.menuBar.addAction(self.menuTool.menuAction())
@@ -453,5 +461,8 @@ class Ui_MainWindow(object):
         self.action_undo.setShortcut(_translate("MainWindow", "Ctrl+Z"))
         self.action_apply.setText(_translate("MainWindow", "Apply"))
         self.action_apply.setShortcut(_translate("MainWindow", "Return"))
+        self.action_calculate_box.setText(_translate("MainWindow", "Calculate box"))
+        self.action_calculate_box.setShortcut(_translate("MainWindow", "Ctrl+C"))
+
 
 from main import Viewer

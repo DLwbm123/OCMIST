@@ -42,7 +42,7 @@ def predict_one(model, data, affine):
     # prediction_image = prediction_to_image(prediction, affine, labels = (1,), label_map = True)
     # prediction_image.to_filename(os.path.join('.', "test.nii.gz"))
 
-def load_trained_model():
+def load_trained_model(filename):
     # prepare:
     custom_objects = {'dice_coefficient_loss': dice_coefficient_loss, 'dice_coefficient': dice_coefficient,
                       'dice_coef': dice_coef, 'dice_coef_loss': dice_coef_loss,
@@ -51,6 +51,6 @@ def load_trained_model():
     custom_objects["InstanceNormalization"] = InstanceNormalization
     start = time.time()
     print('load model')
-    model = load_model('de_model.h5', custom_objects=custom_objects)
+    model = load_model(filename, custom_objects=custom_objects)
     print('model loaded', time.time() - start)
     return model

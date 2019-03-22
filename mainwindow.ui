@@ -423,6 +423,13 @@
            </spacer>
           </item>
           <item>
+           <widget class="QLabel" name="label_xy">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QLabel" name="label_mark">
             <property name="text">
              <string/>
@@ -967,6 +974,7 @@
     <addaction name="separator"/>
     <addaction name="action_undo"/>
     <addaction name="action_apply"/>
+    <addaction name="action_calculate_box"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
@@ -1034,6 +1042,14 @@
    </property>
    <property name="shortcut">
     <string>Return</string>
+   </property>
+  </action>
+  <action name="action_calculate_box">
+   <property name="text">
+    <string>Calculate box</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+C</string>
    </property>
   </action>
  </widget>

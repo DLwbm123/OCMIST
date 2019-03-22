@@ -9,11 +9,14 @@ import os
 import nibabel as nib
 import numpy as np
 import time
+import math
+from random import randint
 
 VIEWER_SIZE = 384
 IMAGE_SIZE = 128
 MINI_VIEWER_SIZE = 160
 
+MODEL = 'pen.h5'
 
 class Image():
     def __init__(self, nii_image, name):
@@ -41,7 +44,7 @@ class ImageManager():
     def __init__(self, main_window):
         self.path = ''
         self.main_window = main_window
-        self.model = load_trained_model()
+        self.model = load_trained_model(MODEL)
 
     def openProject(self, path):
         self.path = path
@@ -69,6 +72,7 @@ class ImageManager():
         # 读取现有mark文件并写入到main_window.mark里
         self.main_window.mark = [list() for x in range(IMAGE_SIZE)]
         self.main_window.resize_level = 0
+        self.main_window.stroke = [list() for x in range(IMAGE_SIZE)]
 
         # 然后显示中间的切片，允许响应用户操作
         self.main_window.statusBar.showMessage('Project loaded: ' + path)
@@ -86,12 +90,48 @@ class ImageManager():
                         for k in range(z - 1, z + 2):
                             if i >= 0 and j >= 0 and k >= 0 and i < IMAGE_SIZE and j < IMAGE_SIZE and k < IMAGE_SIZE:
                                 self.edit[i, j, k] = 1 if m['m'] == '+' else -1
+        # if MODEL == 'up.h5':
         self.edit *= 316.685 # magic
 
     def createAdjustImage(self, level):
         self.adjust = np.ones([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
-        self.adjust *= level / 3 # magic
-        self.adjust -= 0.04 # magic
+        self.adjust *= level
+        # if MODEL == 'de.h5':
+        self.adjust -= 0.1298 # magic
+        self.adjust /= 3 # magic
+
+    # def createBoxImage(self, box):
+    #     self.box = np.zeros([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
+    #     for b in box:
+    #         A = [min(b['A'][0], b['B'][0]), min(b['A'][1], b['B'][1])]
+    #         B = [max(b['A'][0], b['B'][0]), max(b['A'][1], b['B'][1])]
+    #         z = b['z']
+    #         m = b['m']
+    #         for i in range(A[0], B[0] + 1):
+    #             for j in range(A[1], B[1] + 1):
+    #                 for k in range(z - 1, z + 2):
+    #                     if i >= 0 and j >= 0 and k >= 0 and i < IMAGE_SIZE and j < IMAGE_SIZE and k < IMAGE_SIZE:
+    #                         self.box[IMAGE_SIZE - 1 - i, j, k] = m
+    #     self.box -= 0.00022
+    #     self.box /= 0.01489611
+    #     # self.box /= 3
+
+    def createPenImage(self, stroke):
+        self.pen = np.zeros([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
+        for n in stroke:
+            for s in n:
+                # 临时写法
+                for p in s['p']:
+                    x = IMAGE_SIZE - 1 - p['x'] # 空间需要翻转一下
+                    y = p['y']
+                    z = p['z']
+                    for i in range(x - 1, x + 2):
+                        for j in range(y - 1, y + 2):
+                            for k in range(z - 1, z + 2):
+                                if i >= 0 and j >= 0 and k >= 0 and i < IMAGE_SIZE and j < IMAGE_SIZE and k < IMAGE_SIZE:
+                                    self.pen[i, j, k] = 1 if s['m'] == '+' else -1
+        self.pen -= 0.000017638
+        self.pen /= 0.00393432
 
     def predict(self):
         # prepare data:
@@ -101,9 +141,16 @@ class ImageManager():
             self.image['t1ce'].data,
             self.image['flair'].data,
             self.image['t2'].data,
+            # self.adjust,
             # self.edit
-            self.adjust
         ]
+        if MODEL == 'de.h5' or MODEL == 'de_up.h5' or MODEL == 'de_up_pen.h5':
+            data.append(self.adjust)
+        if MODEL == 'up.h5' or MODEL == 'de_up.h5' or MODEL == 'de_up_pen.h5':
+            data.append(self.edit)
+        if MODEL == 'pen.h5' or MODEL == 'de_up_pen.h5':
+            data.append(self.pen)
+
         # 还需要加上用户交互数据
         prediction = predict_one(self.model, data, affine)
         self.image_file['pred'] = prediction_to_image(prediction, affine, labels = (1,), label_map = True)
@@ -121,6 +168,7 @@ class Viewer(QLabel):
     mousemove = pyqtSignal(QEvent)
     mouseleave = pyqtSignal()
     mousepress = pyqtSignal(QEvent)
+    mouserelease = pyqtSignal(QEvent)
 
     def __init__(self, parent):
         super(Viewer, self).__init__(parent)
@@ -128,13 +176,12 @@ class Viewer(QLabel):
 
     def mouseMoveEvent(self, event):
         self.mousemove.emit(event)
-        # if event.buttons() == Qt.NoButton:
-        #     pass
-        # else:
-        #     print(event.x(), event.y())
 
     def mousePressEvent(self, event):
         self.mousepress.emit(event)
+
+    def mouseReleaseEvent(self, event):
+        self.mouserelease.emit(event)
 
     def leaveEvent(self, event):
         self.mouseleave.emit()
@@ -207,6 +254,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             v.mousemove.connect(self.viewerMouseMove)
             v.mouseleave.connect(self.viewerMouseLeave)
             v.mousepress.connect(self.viewerMousePress)
+            v.mouserelease.connect(self.viewerMouseRelease)
 
         ### Setup actions
         self.action_open.triggered.connect(self.actionOpenProject)
@@ -215,8 +263,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_gt.triggered.connect(self.switchShowGt)
         self.action_undo.triggered.connect(self.undo)
         self.action_apply.triggered.connect(self.apply)
-        # self.action_extend.triggered.connect(self.extend)
-        # self.action_shrink.triggered.connect(self.shrink)
+        self.action_extend.triggered.connect(self.extend)
+        self.action_shrink.triggered.connect(self.shrink)
+
+        # self.action_calculate_box.triggered.connect(self.calculateBox)
 
         self.addOverlays()
         self.show()
@@ -225,11 +275,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if not self.image_loaded:
             return
         if event.modifiers() & Qt.ControlModifier:
-            self.resize_level += 1 if event.angleDelta().y() > 0 else -1
+            # 微调分割边缘
+            self.resize_level += 0.5 if event.angleDelta().y() > 0 else -0.5
             # self.resize_level = min(self.resize_level, 5)
             # self.resize_level = max(self.resize_level, -5)
             self.updateResizeLevel()
         else:
+            # 切换切片
             v = self.slider.value()
             v += 1 if event.angleDelta().y() > 0 else -1
             v = min(v, self.slider.maximum())
@@ -278,9 +330,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def viewerMouseMove(self, event):
         if not self.image_loaded:
             return
+
         for m in self.mask:
             self.mask[m].cross = [event.y(), event.x()]
             self.mask[m].paint()
+        imagey, imagex = self.screenToImage(event.y(), event.x())
+        self.updateMousePosition(imagey, imagex)
+        if event.buttons() == Qt.LeftButton or event.buttons() == Qt.RightButton:
+            self.addStrokePoint(imagey, imagex)
+            self.plotAll()
 
     def viewerMouseLeave(self):
         if not self.image_loaded:
@@ -288,19 +346,25 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         for m in self.mask:
             self.mask[m].cross = [-100, -100]
             self.mask[m].paint()
+        self.updateMousePosition(-1, -1)
 
     def viewerMousePress(self, event):
         if not self.image_loaded:
             return
-        if event.button() == Qt.LeftButton:
-            m = '+'
-        elif event.button() == Qt.RightButton:
-            m = '-'
-        else:
-            return
-        self.addMark(event.y(), event.x(), m)
+        if event.buttons() == Qt.LeftButton:
+            self.addStroke('+')
+        if event.buttons() == Qt.RightButton:
+            self.addStroke('-')
 
-    def addMark(self, screeny, screenx, mark):
+    def viewerMouseRelease(self, event):
+        if not self.image_loaded:
+            return
+        imagey, imagex = self.screenToImage(event.y(), event.x())
+        self.addStrokePoint(imagey, imagex)
+        self.checkStrokeLength()
+        self.plotAll()
+
+    def screenToImage(self, screeny, screenx):
         # 首先转换为以viewer中心为原点
         screeny -= VIEWER_SIZE / 2
         screenx -= VIEWER_SIZE / 2
@@ -312,6 +376,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         imagey = int(round((screeny / h + 0.5) * IMAGE_SIZE))
         imagex = int(round((screenx / w + 0.5) * IMAGE_SIZE))
         if imagex < 0 or imagey < 0 or imagex >= IMAGE_SIZE or imagey >= IMAGE_SIZE:
+            return -1, -1
+        return imagey, imagex
+
+    def addMark(self, imagey, imagex, mark):
+        # imagey, imagex = self.screenToImage(screeny, screenx)
+        if imagey < 0 or imagex < 0:
             return
         imagez = self.slice
         m = {
@@ -327,11 +397,52 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         })
         self.plotAll()
         self.updateNumberOfMarks()
-        print(imagex, imagey, imagez, mark)
+        print('mark:', m)
+
+    def addStroke(self, mark):
+        s = {
+            'p': list(),
+            'm': mark,
+            'z': self.slice
+        }
+        self.stroke[self.slice].append(s)
+        self.operations.append({
+            'operation': 'stroke',
+            'data': s
+        })
+        # print('addStroke:', mark)
+
+    def addStrokePoint(self, imagey, imagex):
+        if imagey < 0 or imagex < 0:
+            return
+        s = self.stroke[self.slice][-1]
+        s['p'].append({
+            'x': imagex,
+            'y': imagey,
+            'z': self.slice
+        })
+        self.plotAll()
+        # print(imagex, imagey, self.slice, s['m'])
+
+    def checkStrokeLength(self):
+        # 检查最后生成的笔触，如果长度太短，就转换为标记
+        length = 0
+        s = self.stroke[self.slice][-1]
+        for i in range(len(s['p']) - 1):
+            length += abs(s['p'][i]['x'] - s['p'][i + 1]['x'])
+            length += abs(s['p'][i]['y'] - s['p'][i + 1]['y'])
+        if length <= 5:
+            # print(s)
+            x = s['p'][-1]['x']
+            y = s['p'][-1]['y']
+            m = s['m']
+            self.undo()
+            self.addMark(y, x, m)
+        else:
+            print('stroke:', s)
 
     def shrink(self):
         self.resize_level -= 1.0
-
 
     def extend(self):
         self.resize_level += 1.0
@@ -345,8 +456,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #     self.tmp_mark[i] = list()
         # 然后计算这一部分
 
-        # self.image_manager.createEditImage(self.mark)
-        self.image_manager.createAdjustImage(self.resize_level)
+        if MODEL == 'de.h5' or MODEL == 'de_up.h5' or MODEL == 'de_up_pen.h5':
+            self.image_manager.createAdjustImage(self.resize_level)
+        if MODEL == 'up.h5' or MODEL == 'de_up.h5' or MODEL == 'de_up_pen.h5':
+            self.image_manager.createEditImage(self.mark)
+        if MODEL == 'pen.h5' or MODEL == 'de_up_pen.h5':
+            self.image_manager.createPenImage(self.stroke)
         self.image_manager.predict()
 
     def undo(self):
@@ -362,6 +477,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.updateNumberOfMarks()
         if o['operation'] == 'adjust':
             pass
+        if o['operation'] == 'stroke':
+            z = o['data']['z']
+            self.stroke[z].pop()
+            self.plotAll()
+        # print('undo:', self.operations[-1])
         self.operations.pop()
 
     def addOverlays(self):
@@ -424,6 +544,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if direction == 'axi':
             for m in self.mark[slice]:
                 self.drawMark(img, m['y'], m['x'], m['m'])
+            for s in self.stroke[slice]:
+                for m in s['p']:
+                    self.drawMark(img, m['y'], m['x'], s['m']) # 临时画法
         if direction != 'axi':
             img[-1 - self.slice, :, 1] = 255
 
@@ -459,7 +582,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             for i in range(y - 2, y + 3):
                 if i >= 0 and i < IMAGE_SIZE:
                     img[i][x] = [0, 255, 0]
-
 
     def sliderValueChanged(self, value):
         # print(value)
@@ -502,6 +624,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.bar_recall.setStretch(i, s[i])
         return [dice, jaccard, precision, recall]
 
+    def updateMousePosition(self, y, x):
+        if x < 0 or y < 0:
+            self.label_xy.setVisible(False)
+            return
+        self.label_xy.setVisible(True)
+        self.label_xy.setText('x: ' + str(x) + ', y: ' + str(y))
+
     def updateNumberOfMarks(self):
         count = 0
         for i in self.mark:
@@ -521,6 +650,96 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.operations = list()
         self.updateNumberOfMarks()
         self.updateResizeLevel()
+    #
+    # def calculateBox(self):
+    #     # 预处理，求累积和
+    #     s = IMAGE_SIZE
+    #     blue = np.zeros([s, s])
+    #     pink = np.zeros([s, s])
+    #     red = np.zeros([s, s])
+    #     for i in range(1, s):
+    #         for j in range(1, s):
+    #             blue[i, j] = blue[i - 1, j] + blue[i, j - 1] - blue[i - 1, j - 1]
+    #             pink[i, j] = pink[i - 1, j] + pink[i, j - 1] - pink[i - 1, j - 1]
+    #             red[i, j] = red[i - 1, j] + red[i, j - 1] - red[i - 1, j - 1]
+    #             t = self.image_manager.image['truth'].data[i, j, self.slice]
+    #             p = self.image_manager.image['pred'].data[i, j, self.slice]
+    #             if t == 1 and p == 1:
+    #                 pink[i, j] += 1
+    #             elif t == 1:
+    #                 red[i, j] += 1
+    #             elif p == 1:
+    #                 blue[i, j] += 1
+    #     # 随机初始化
+    #     # A = [randint(0, s - 1), randint(0, s - 1)]
+    #     # B = [randint(0, s - 1), randint(0, s - 1)]
+    #     # score = self.getScore(A, B, blue, red, pink)
+    #     # E = [[0, 1], [0, -1], [1, 0], [-1, 0]]
+    #     # while True:
+    #     #     N = list()
+    #     #     for i in range(4):
+    #     #         N.append([[A[0] + E[i][0], A[1] + E[i][1]], [B[0], B[1]]])
+    #     #         N.append([[A[0], A[1]], [B[0] + E[i][0], B[1] + E[i][1]]])
+    #     #     S = list()
+    #     #     for i in N:
+    #     #         S.append(self.getScore(i[0], i[1], blue, red, pink))
+    #     #     if score < max(S):
+    #     #         score = max(S)
+    #     #     else:
+    #     #         break
+    #     #     T = N[S.index(score)]
+    #     #     A = T[0]
+    #     #     B = T[1]
+    #     # A[0] = s - 1 - A[0]
+    #     # B[0] = s - 1 - B[0]
+    #     # print(A, B, score)
+    #
+    #     score = 0
+    #     A = [0, 0]
+    #     B = [0, 0]
+    #     for x0 in range(1, 32):
+    #         for y0 in range(1, 32):
+    #             for x1 in range(x0 + 2, 32):
+    #                 for y1 in range(y0 + 2, 32):
+    #                     t = self.getScore([x0*4, y0*4], [x1*4, y1*4], blue, red, pink)
+    #                     if t > score:
+    #                         score = t
+    #                         A = [x0*4, y0*4]
+    #                         B = [x1*4, y1*4]
+    #                         A[0] = s - 1 - A[0]
+    #                         B[0] = s - 1 - B[0]
+    #                         print(A, B, score)
+    #     print('ok')
+    #     self.box.append({
+    #         'A': A,
+    #         'B': B,
+    #         'z': self.slice,
+    #         'm': -1
+    #     })
+    #
+    # def getScore(self, C, D, blue, red, pink):
+    #     A = [min(C[0], D[0]), min(C[1], D[1])]
+    #     B = [max(C[0], D[0]), max(C[1], D[1])]
+    #     if A[0] <= 0 or A[1] <= 0 or B[0] <= 0 or B[1] <= 0:
+    #         return 0
+    #     if A[0] >= IMAGE_SIZE - 1 or A[1] >= IMAGE_SIZE - 1 or B[0] >= IMAGE_SIZE - 1 or B[1] >= IMAGE_SIZE - 1:
+    #         return 0
+    #     if B[0] - A[0] < 5 or B[1] - A[1] < 5:
+    #         return 0
+    #     b = abs(blue[A[0] - 1, A[1] - 1] + blue[B[0], B[1]] - blue[A[0] - 1, B[1]] - blue[B[0], A[1] - 1])
+    #     r = abs(red[A[0] - 1, A[1] - 1] + red[B[0], B[1]] - red[A[0] - 1, B[1]] - red[B[0], A[1] - 1])
+    #     p = abs(pink[A[0] - 1, A[1] - 1] + pink[B[0], B[1]] - pink[A[0] - 1, B[1]] - pink[B[0], A[1] - 1])
+    #     t = (B[0] - A[0]) * (B[1] - A[1])
+    #     ratio = (B[0] - A[0]) / (B[1] - A[1])
+    #     ratio = max(ratio, 1 / ratio)
+    #     return self.boxScore(t, b, r, p)# + 0.2 / ratio
+    #
+    # def boxScore(self, total, blue, red, pink):
+    #     # a = 1 - math.exp(-total / 100)
+    #     white = total - blue - red - pink
+    #     # b = (blue - red * 2 - white) / (1 + total)
+    #     # return a + b * 1.5
+    #     return max(blue - red * 2 - white/2-pink/40, red - blue * 2 - white/2-pink/40)
 
 if __name__ == '__main__':
     app = QApplication([])
