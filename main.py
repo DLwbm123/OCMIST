@@ -120,7 +120,6 @@ class ImageManager():
         self.pen = np.zeros([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
         for n in stroke:
             for s in n:
-                # 临时写法
                 for p in s['p']:
                     x = IMAGE_SIZE - 1 - p['x'] # 空间需要翻转一下
                     y = p['y']
@@ -202,25 +201,25 @@ class Mask():
         self.img = np.zeros([self.w, self.h, 4], dtype=np.uint8)
 
         # draw code here
-        self.drawCross(self.cross, [128, 255, 128, 128])
+        self.drawCross(self.cross, [170, 228, 184, 128])
 
         qimg = QImage(self.img, self.w, self.h, self.w * 4, QImage.Format_RGBA8888)
         qpix = QPixmap(qimg)
         self.mask.setPixmap(qpix)
 
-    def drawCross(self, pos, color):
+    def drawCross(self, pos, color, size = 0):
         x = pos[0]
         y = pos[1]
         for j in range(y - 1, y + 2):
             for i in range(x - 8, x - 3):
-                self.drawPixel(i, j, color)
+                self.drawPixel(i - size * 4, j, color)
             for i in range(x + 4, x + 9):
-                self.drawPixel(i, j, color)
+                self.drawPixel(i + size * 4, j, color)
         for i in range(x - 1, x + 2):
             for j in range(y - 8, y - 3):
-                self.drawPixel(i, j, color)
+                self.drawPixel(i, j - size * 4, color)
             for j in range(y + 4, y + 9):
-                self.drawPixel(i, j, color)
+                self.drawPixel(i, j + size * 4, color)
 
 
     def drawPixel(self, x, y, color):
@@ -416,10 +415,59 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if imagey < 0 or imagex < 0:
             return
         s = self.stroke[self.slice][-1]
+        interpolate = [[imagex, imagey]]
+        # 对最后一个点和当前的点插值
+        if len(s['p']) != 0:
+            last = s['p'][-1]
+            x1 = last['x']
+            y1 = last['y']
+            x2 = imagex
+            y2 = imagey
+            dx = x2 - x1
+            dy = y2 - y1
+            if dx == 0:
+                for i in range(1, abs(dy)):
+                    interpolate.append([x1, y1 + i * (1 if dy > 0 else -1)])
+            elif dy == 0:
+                for i in range(1, abs(dx)):
+                    interpolate.append([x1 + i * (1 if dx > 0 else -1), y1])
+            else:
+                if dx < 0:
+                    dx *= -1
+                    dy *= -1
+                    tmp = x1
+                    x1 = x2
+                    x2 = tmp
+                    tmp = y1
+                    y1 = y2
+                    y2 = tmp
+                k = dy / dx
+                e = -0.5
+                u = 1 if k > 0 else -1
+                x = x1
+                y = y1
+                if abs(k) <= 1:
+                    for i in range(dx + 1):
+                        interpolate.append([x, y])
+                        x += 1
+                        e += u * k
+                        if e >= 0:
+                            y += u
+                            e -= 1
+                else:
+                    for i in range(dy * u + 1):
+                        interpolate.append([x, y])
+                        y += u
+                        e += 1 / k * u
+                        if e >= 0:
+                            x += 1
+                            e -= 1
+
         s['p'].append({
             'x': imagex,
             'y': imagey,
-            'z': self.slice
+            'z': self.slice,
+            'i': interpolate
         })
         self.plotAll()
         # print(imagex, imagey, self.slice, s['m'])
@@ -439,7 +487,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.undo()
             self.addMark(y, x, m)
         else:
-            print('stroke:', s)
+            print('stroke:', length)
 
     def shrink(self):
         self.resize_level -= 1.0
@@ -531,22 +579,26 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             img_gray = np.flip(np.rot90(image.char_data[slice, :, :]), axis = 1).copy()
 
         img = np.stack((img_gray,) * 3, axis = -1)
+        gt = np.rot90(self.image_manager.image['truth'].char_data[:, :, slice], -1).copy()
+        pred = np.rot90(self.image_manager.image['pred'].char_data[:, :, slice], -1).copy()
+        # gp = gt * pred
         if direction == 'axi' and self.show_gt:
-            gt = np.rot90(self.image_manager.image['truth'].char_data[:, :, slice], -1).copy()
-            gt *= 255
-            gt = np.max([gt, img_gray], axis = 0)
-            img[:, :, 0] = gt
+            img[:, :, 0][gt == 1] = 255
+            # self.mixColor(img, gt, [224, 37, 56])
         if direction == 'axi' and self.show_pred:
-            pred = np.rot90(self.image_manager.image['pred'].char_data[:, :, slice], -1).copy()
-            pred *= 255
-            pred = np.max([pred, img_gray], axis = 0)
-            img[:, :, 2] = pred
+            img[:, :, 2][pred == 1] = 255
+            # self.mixColor(img, pred, [48, 107, 200])
+        if direction == 'axi' and self.show_pred and self.show_gt:
+            pass
+            # self.mixColor(img, gp, [255, 64, 255])#[224, 107, 200])
+
         if direction == 'axi':
             for m in self.mark[slice]:
-                self.drawMark(img, m['y'], m['x'], m['m'])
+                self.drawMark(img, m['y'], m['x'], m['m'], 'mark')
             for s in self.stroke[slice]:
                 for m in s['p']:
-                    self.drawMark(img, m['y'], m['x'], s['m']) # 临时画法
+                    for i in m['i']:
+                        self.drawMark(img, i[1], i[0], s['m'], 'stroke')
         if direction != 'axi':
             img[-1 - self.slice, :, 1] = 255
 
@@ -574,14 +626,27 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.plotImage(self.image_manager.image['t2'], self.slice)
         self.plotSagCor()
 
-    def drawMark(self, img, y, x, m):
-        for i in range(x - 2, x + 3):
-            if i >= 0 and i < IMAGE_SIZE:
-                img[y][i] = [0, 255, 0]
-        if m == '+':
-            for i in range(y - 2, y + 3):
+    # def mixColor(self, img, mask, color):
+    #     # img[mask == 1] = color
+    #     # img[mask == 1] = (img[mask == 1] / 3).astype(np.uint8)
+    #     # img[mask == 1] += (np.array(color) * 2 / 3).astype(np.uint8)
+
+    def drawMark(self, img, y, x, m, type):
+        color = [249, 167, 70] if m == '+' else [41, 200, 252]
+        if type == 'mark':
+            for i in range(x - 2, x + 3):
                 if i >= 0 and i < IMAGE_SIZE:
-                    img[i][x] = [0, 255, 0]
+                    img[y][i] = color
+            if m == '+':
+                for i in range(y - 2, y + 3):
+                    if i >= 0 and i < IMAGE_SIZE:
+                        img[i][x] = color
+        color = [249, 167, 70] if m == '+' else [41, 200, 252]
+        # color = [253, 234, 114] if m == '+' else [87, 222, 253]
+        if type == 'stroke':
+            for i in range(x - 1, x + 2):
+                for j in range(y - 1, y + 2):
+                    img[j, i] = color
 
     def sliderValueChanged(self, value):
         # print(value)
@@ -650,96 +715,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.operations = list()
         self.updateNumberOfMarks()
         self.updateResizeLevel()
-    #
-    # def calculateBox(self):
-    #     # 预处理，求累积和
-    #     s = IMAGE_SIZE
-    #     blue = np.zeros([s, s])
-    #     pink = np.zeros([s, s])
-    #     red = np.zeros([s, s])
-    #     for i in range(1, s):
-    #         for j in range(1, s):
-    #             blue[i, j] = blue[i - 1, j] + blue[i, j - 1] - blue[i - 1, j - 1]
-    #             pink[i, j] = pink[i - 1, j] + pink[i, j - 1] - pink[i - 1, j - 1]
-    #             red[i, j] = red[i - 1, j] + red[i, j - 1] - red[i - 1, j - 1]
-    #             t = self.image_manager.image['truth'].data[i, j, self.slice]
-    #             p = self.image_manager.image['pred'].data[i, j, self.slice]
-    #             if t == 1 and p == 1:
-    #                 pink[i, j] += 1
-    #             elif t == 1:
-    #                 red[i, j] += 1
-    #             elif p == 1:
-    #                 blue[i, j] += 1
-    #     # 随机初始化
-    #     # A = [randint(0, s - 1), randint(0, s - 1)]
-    #     # B = [randint(0, s - 1), randint(0, s - 1)]
-    #     # score = self.getScore(A, B, blue, red, pink)
-    #     # E = [[0, 1], [0, -1], [1, 0], [-1, 0]]
-    #     # while True:
-    #     #     N = list()
-    #     #     for i in range(4):
-    #     #         N.append([[A[0] + E[i][0], A[1] + E[i][1]], [B[0], B[1]]])
-    #     #         N.append([[A[0], A[1]], [B[0] + E[i][0], B[1] + E[i][1]]])
-    #     #     S = list()
-    #     #     for i in N:
-    #     #         S.append(self.getScore(i[0], i[1], blue, red, pink))
-    #     #     if score < max(S):
-    #     #         score = max(S)
-    #     #     else:
-    #     #         break
-    #     #     T = N[S.index(score)]
-    #     #     A = T[0]
-    #     #     B = T[1]
-    #     # A[0] = s - 1 - A[0]
-    #     # B[0] = s - 1 - B[0]
-    #     # print(A, B, score)
-    #
-    #     score = 0
-    #     A = [0, 0]
-    #     B = [0, 0]
-    #     for x0 in range(1, 32):
-    #         for y0 in range(1, 32):
-    #             for x1 in range(x0 + 2, 32):
-    #                 for y1 in range(y0 + 2, 32):
-    #                     t = self.getScore([x0*4, y0*4], [x1*4, y1*4], blue, red, pink)
-    #                     if t > score:
-    #                         score = t
-    #                         A = [x0*4, y0*4]
-    #                         B = [x1*4, y1*4]
-    #                         A[0] = s - 1 - A[0]
-    #                         B[0] = s - 1 - B[0]
-    #                         print(A, B, score)
-    #     print('ok')
-    #     self.box.append({
-    #         'A': A,
-    #         'B': B,
-    #         'z': self.slice,
-    #         'm': -1
-    #     })
-    #
-    # def getScore(self, C, D, blue, red, pink):
-    #     A = [min(C[0], D[0]), min(C[1], D[1])]
-    #     B = [max(C[0], D[0]), max(C[1], D[1])]
-    #     if A[0] <= 0 or A[1] <= 0 or B[0] <= 0 or B[1] <= 0:
-    #         return 0
-    #     if A[0] >= IMAGE_SIZE - 1 or A[1] >= IMAGE_SIZE - 1 or B[0] >= IMAGE_SIZE - 1 or B[1] >= IMAGE_SIZE - 1:
-    #         return 0
-    #     if B[0] - A[0] < 5 or B[1] - A[1] < 5:
-    #         return 0
-    #     b = abs(blue[A[0] - 1, A[1] - 1] + blue[B[0], B[1]] - blue[A[0] - 1, B[1]] - blue[B[0], A[1] - 1])
-    #     r = abs(red[A[0] - 1, A[1] - 1] + red[B[0], B[1]] - red[A[0] - 1, B[1]] - red[B[0], A[1] - 1])
-    #     p = abs(pink[A[0] - 1, A[1] - 1] + pink[B[0], B[1]] - pink[A[0] - 1, B[1]] - pink[B[0], A[1] - 1])
-    #     t = (B[0] - A[0]) * (B[1] - A[1])
-    #     ratio = (B[0] - A[0]) / (B[1] - A[1])
-    #     ratio = max(ratio, 1 / ratio)
-    #     return self.boxScore(t, b, r, p)# + 0.2 / ratio
-    #
-    # def boxScore(self, total, blue, red, pink):
-    #     # a = 1 - math.exp(-total / 100)
-    #     white = total - blue - red - pink
-    #     # b = (blue - red * 2 - white) / (1 + total)
-    #     # return a + b * 1.5
-    #     return max(blue - red * 2 - white/2-pink/40, red - blue * 2 - white/2-pink/40)
 
 if __name__ == '__main__':
     app = QApplication([])
