@@ -51,6 +51,6 @@ def load_trained_model(filename):
     custom_objects["InstanceNormalization"] = InstanceNormalization
     start = time.time()
     print('load model')
-    model = load_model(filename, custom_objects=custom_objects)
+    model = load_model(filename + '.h5', custom_objects=custom_objects)
     print('model loaded', time.time() - start)
     return model

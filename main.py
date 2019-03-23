@@ -10,13 +10,14 @@ import nibabel as nib
 import numpy as np
 import time
 import math
+import json
 from random import randint
 
 VIEWER_SIZE = 384
 IMAGE_SIZE = 128
 MINI_VIEWER_SIZE = 160
 
-MODEL = 'pen.h5'
+MODEL = 'de_up_pen'
 
 class Image():
     def __init__(self, nii_image, name):
@@ -56,7 +57,7 @@ class ImageManager():
             't1ce': os.path.join(self.path, 'data_t1ce.nii.gz'),
             't2': os.path.join(self.path, 'data_t2.nii.gz'),
             'truth': os.path.join(self.path, 'truth.nii.gz'),
-            'pred': os.path.join(self.path, 'prediction.nii.gz')
+            # 'pred': os.path.join(self.path, 'prediction.nii.gz')
         }
         # 不符合条件则返回并提示
         self.image_file = dict()
@@ -74,9 +75,27 @@ class ImageManager():
         self.main_window.resize_level = 0
         self.main_window.stroke = [list() for x in range(IMAGE_SIZE)]
 
+        self.main_window.operations = list()
+        self.main_window.loadOperations(os.path.join(self.path, MODEL + '.edit.json'), load_prediction = True)
+
         # 然后显示中间的切片，允许响应用户操作
         self.main_window.statusBar.showMessage('Project loaded: ' + path)
         self.main_window.loadFinished()
+
+    def savePrediction(self):
+        t = time.strftime("%Y%m%d%H%M%S", time.localtime())
+        filename = 'prediction_' + t + '.nii.gz'
+        path = os.path.join(self.path, filename)
+        self.image_file['pred'].to_filename(path)
+        self.main_window.saveOperations(filename)
+        QMessageBox.information(self.main_window, 'Information', 'Prediction saved to ' + path, QMessageBox.Ok)
+
+    def loadPrediction(self, filename):
+        path = os.path.join(self.path, filename)
+        self.image_path['pred'] = path
+        if os.path.isfile(path):
+            self.image_file['pred'] = nib.load(self.image_path['pred'])
+            self.image['pred'] = Image(self.image_file['pred'], 'pred')
 
     def createEditImage(self, mark):
         self.edit = np.zeros([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
@@ -90,13 +109,13 @@ class ImageManager():
                         for k in range(z - 1, z + 2):
                             if i >= 0 and j >= 0 and k >= 0 and i < IMAGE_SIZE and j < IMAGE_SIZE and k < IMAGE_SIZE:
                                 self.edit[i, j, k] = 1 if m['m'] == '+' else -1
-        # if MODEL == 'up.h5':
+        # if MODEL == 'up':
         self.edit *= 316.685 # magic
 
     def createAdjustImage(self, level):
         self.adjust = np.ones([IMAGE_SIZE, IMAGE_SIZE, IMAGE_SIZE]).astype(np.float)
         self.adjust *= level
-        # if MODEL == 'de.h5':
+        # if MODEL == 'de':
         self.adjust -= 0.1298 # magic
         self.adjust /= 3 # magic
 
@@ -143,11 +162,11 @@ class ImageManager():
             # self.adjust,
             # self.edit
         ]
-        if MODEL == 'de.h5' or MODEL == 'de_up.h5' or MODEL == 'de_up_pen.h5':
+        if MODEL == 'de' or MODEL == 'de_up' or MODEL == 'de_up_pen':
             data.append(self.adjust)
-        if MODEL == 'up.h5' or MODEL == 'de_up.h5' or MODEL == 'de_up_pen.h5':
+        if MODEL == 'up' or MODEL == 'de_up' or MODEL == 'de_up_pen':
             data.append(self.edit)
-        if MODEL == 'pen.h5' or MODEL == 'de_up_pen.h5':
+        if MODEL == 'pen' or MODEL == 'de_up_pen':
             data.append(self.pen)
 
         # 还需要加上用户交互数据
@@ -157,11 +176,8 @@ class ImageManager():
         self.main_window.plotAll()
         self.main_window.calculateDiceJaccardPrecisionRecall()
 
-    def savePrediction(self):
-        t = time.strftime("%Y%m%d%H%M%S", time.localtime())
-        path = os.path.join(self.path, 'prediction_' + t + '.nii.gz')
-        self.image_file['pred'].to_filename(path)
-        QMessageBox.information(self.main_window, 'Information', 'Prediction saved to ' + path, QMessageBox.Ok)
+
+
 
 class Viewer(QLabel):
     mousemove = pyqtSignal(QEvent)
@@ -239,7 +255,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.image_loaded = False
         self.image_manager = ImageManager(self)
-        self.show_gt = False
+        self.show_gt = True
         self.show_pred = True
 
         self.mouse_strength = 0
@@ -386,11 +402,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             return -1, -1
         return imagey, imagex
 
-    def addMark(self, imagey, imagex, mark):
+    def addMark(self, imagey, imagex, mark, imagez = None, plot = False):
         # imagey, imagex = self.screenToImage(screeny, screenx)
         if imagey < 0 or imagex < 0:
             return
-        imagez = self.slice
+        if imagez == None:
+            imagez = self.slice
         m = {
             'x': imagex,
             'y': imagey,
@@ -402,27 +419,32 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             'operation': 'mark',
             'data': m
         })
-        self.plotAll()
+        if plot:
+            self.plotAll()
         self.updateNumberOfMarks()
         print('mark:', m)
 
-    def addStroke(self, mark):
+    def addStroke(self, mark, imagez = None):
+        if imagez == None:
+            imagez = self.slice
         s = {
             'p': list(),
             'm': mark,
-            'z': self.slice
+            'z': imagez
         }
-        self.stroke[self.slice].append(s)
+        self.stroke[imagez].append(s)
         self.operations.append({
             'operation': 'stroke',
             'data': s
         })
         # print('addStroke:', mark)
 
-    def addStrokePoint(self, imagey, imagex):
+    def addStrokePoint(self, imagey, imagex, imagez = None, plot = False):
         if imagey < 0 or imagex < 0:
             return
-        s = self.stroke[self.slice][-1]
+        if imagez == None:
+            imagez = self.slice
+        s = self.stroke[imagez][-1]
         interpolate = [[imagex, imagey]]
         # 对最后一个点和当前的点插值
         if len(s['p']) != 0:
@@ -474,10 +496,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         s['p'].append({
             'x': imagex,
             'y': imagey,
-            'z': self.slice,
+            'z': imagez,
             'i': interpolate
         })
-        self.plotAll()
+        if plot:
+            self.plotAll()
         # print(imagex, imagey, self.slice, s['m'])
 
     def checkStrokeLength(self):
@@ -493,7 +516,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             y = s['p'][-1]['y']
             m = s['m']
             self.undo()
-            self.addMark(y, x, m)
+            self.addMark(y, x, m, plot = True)
         else:
             print('stroke:', length)
 
@@ -512,11 +535,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         #     self.tmp_mark[i] = list()
         # 然后计算这一部分
 
-        if MODEL == 'de.h5' or MODEL == 'de_up.h5' or MODEL == 'de_up_pen.h5':
+        if MODEL == 'de' or MODEL == 'de_up' or MODEL == 'de_up_pen':
             self.image_manager.createAdjustImage(self.resize_level)
-        if MODEL == 'up.h5' or MODEL == 'de_up.h5' or MODEL == 'de_up_pen.h5':
+        if MODEL == 'up' or MODEL == 'de_up' or MODEL == 'de_up_pen':
             self.image_manager.createEditImage(self.mark)
-        if MODEL == 'pen.h5' or MODEL == 'de_up_pen.h5':
+        if MODEL == 'pen' or MODEL == 'de_up_pen':
             self.image_manager.createPenImage(self.stroke)
         self.image_manager.predict()
 
@@ -720,9 +743,47 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.container_score.setVisible(True)
         self.container_sag.setVisible(True)
         self.container_cor.setVisible(True)
-        self.operations = list()
         self.updateNumberOfMarks()
         self.updateResizeLevel()
+
+    def saveOperations(self, prediction_filename):
+        path = os.path.join(self.image_manager.path, MODEL + '.edit.json')
+        if len(self.operations) == 0 and self.resize_level == 0:
+            path = os.path.join(self.image_manager.path, MODEL + '.no_edit.json')
+        data = json.dumps({
+            'score': self.calculateDiceJaccardPrecisionRecall(),
+            'prediction': prediction_filename,
+            'resize': self.resize_level,
+            'operations': self.operations
+        })
+        f = open(path, 'w')
+        f.write(data)
+        f.close()
+
+    def loadOperations(self, path, load_prediction = True):
+        if os.path.isfile(path):
+            f = open(path, 'r')
+            data = json.loads(f.read())
+            f.close()
+            self.resize_level = data['resize']
+            for o in data['operations']:
+                m = o['data']['m']
+                z = o['data']['z']
+                if o['operation'] == 'stroke':
+                    self.addStroke(m, imagez = z)
+                    for p in o['data']['p']:
+                        self.addStrokePoint(p['y'], p['x'], imagez = z)
+                if o['operation'] == 'mark':
+                    y = o['data']['y']
+                    x = o['data']['x']
+                    self.addMark(y, x, m, imagez = z)
+            pred = data['prediction']
+        else:
+            pred = 'prediction.nii.gz'
+        # self.plotAll()
+        if load_prediction:
+            self.image_manager.loadPrediction(pred)
+
 
 if __name__ == '__main__':
     app = QApplication([])
