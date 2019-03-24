@@ -233,8 +233,17 @@
                </property>
                <item>
                 <widget class="QLabel" name="label_dice1">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #3f51b5;</string>
+                  <string notr="true">background-color: #7a62c9;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -243,8 +252,17 @@
                </item>
                <item>
                 <widget class="QLabel" name="label_dice2">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #9c27b0 ;</string>
+                  <string notr="true">background-color: #c351c3 ;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -253,8 +271,17 @@
                </item>
                <item>
                 <widget class="QLabel" name="label_dice3">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #9c27b0 ;</string>
+                  <string notr="true">background-color: #c351c3 ;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -263,8 +290,17 @@
                </item>
                <item>
                 <widget class="QLabel" name="label_dice4">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #f44336;</string>
+                  <string notr="true">background-color: #ff6b6b;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -293,8 +329,17 @@
                </property>
                <item>
                 <widget class="QLabel" name="label_jaccard1">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #3f51b5;</string>
+                  <string notr="true">background-color: #7a62c9;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -303,8 +348,17 @@
                </item>
                <item>
                 <widget class="QLabel" name="label_jaccard2">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #9c27b0 ;</string>
+                  <string notr="true">background-color: #c351c3 ;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -313,8 +367,17 @@
                </item>
                <item>
                 <widget class="QLabel" name="label_jaccard4">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #f44336;</string>
+                  <string notr="true">background-color: #ff6b6b;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -343,8 +406,17 @@
                </property>
                <item>
                 <widget class="QLabel" name="label_precision1">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #3f51b5;</string>
+                  <string notr="true">background-color: #7a62c9;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -353,8 +425,17 @@
                </item>
                <item>
                 <widget class="QLabel" name="label_precision2">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #9c27b0 ;</string>
+                  <string notr="true">background-color: #c351c3 ;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -383,8 +464,17 @@
                </property>
                <item>
                 <widget class="QLabel" name="label_recall2">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #9c27b0 ;</string>
+                  <string notr="true">background-color: #c351c3 ;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
@@ -393,8 +483,17 @@
                </item>
                <item>
                 <widget class="QLabel" name="label_recall4">
+                 <property name="minimumSize">
+                  <size>
+                   <width>1</width>
+                   <height>0</height>
+                  </size>
+                 </property>
                  <property name="styleSheet">
-                  <string notr="true">background-color: #f44336;</string>
+                  <string notr="true">background-color: #ff6b6b;</string>
+                 </property>
+                 <property name="lineWidth">
+                  <number>0</number>
                  </property>
                  <property name="text">
                   <string/>
