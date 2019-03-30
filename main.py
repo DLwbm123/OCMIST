@@ -11,13 +11,16 @@ import numpy as np
 import time
 import math
 import json
+import csv
 from random import randint
 
 VIEWER_SIZE = 384
 IMAGE_SIZE = 128
 MINI_VIEWER_SIZE = 160
 
-MODEL = 'de_up_pen'
+MODEL = 'pen'
+
+TEST = False
 
 class Image():
     def __init__(self, nii_image, name):
@@ -76,7 +79,7 @@ class ImageManager():
         self.main_window.stroke = [list() for x in range(IMAGE_SIZE)]
 
         self.main_window.operations = list()
-        self.main_window.loadOperations(os.path.join(self.path, MODEL + '.edit.json'), load_prediction = True)
+        self.main_window.loadOperations(self.path, load_prediction = True)
 
         # 然后显示中间的切片，允许响应用户操作
         self.main_window.statusBar.showMessage('Project loaded: ' + path)
@@ -88,7 +91,8 @@ class ImageManager():
         path = os.path.join(self.path, filename)
         self.image_file['pred'].to_filename(path)
         self.main_window.saveOperations(filename)
-        QMessageBox.information(self.main_window, 'Information', 'Prediction saved to ' + path, QMessageBox.Ok)
+        if not TEST:
+            QMessageBox.information(self.main_window, 'Information', 'Prediction saved to ' + path, QMessageBox.Ok)
 
     def loadPrediction(self, filename):
         path = os.path.join(self.path, filename)
@@ -159,8 +163,6 @@ class ImageManager():
             self.image['t1ce'].data,
             self.image['flair'].data,
             self.image['t2'].data,
-            # self.adjust,
-            # self.edit
         ]
         if MODEL == 'de' or MODEL == 'de_up' or MODEL == 'de_up_pen':
             data.append(self.adjust)
@@ -218,7 +220,8 @@ class Mask():
         self.img = np.zeros([self.w, self.h, 4], dtype=np.uint8)
 
         # draw code here
-        self.drawCross(self.cross, [170, 228, 184, 128], self.size)
+        self.drawCross(self.cross, [255, 254, 87, 128], self.size)
+        # self.drawCross(self.cross, [170, 228, 184, 128], self.size)
 
         qimg = QImage(self.img, self.w, self.h, self.w * 4, QImage.Format_RGBA8888)
         qpix = QPixmap(qimg)
@@ -257,6 +260,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.image_manager = ImageManager(self)
         self.show_gt = True
         self.show_pred = True
+        self.show_image = True
 
         self.mouse_strength = 0
 
@@ -279,6 +283,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.action_save.triggered.connect(self.image_manager.savePrediction)
         self.action_pred.triggered.connect(self.switchShowPred)
         self.action_gt.triggered.connect(self.switchShowGt)
+        self.action_image.triggered.connect(self.switchShowImage)
         self.action_undo.triggered.connect(self.undo)
         self.action_apply.triggered.connect(self.apply)
         self.action_extend.triggered.connect(self.extend)
@@ -288,6 +293,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.addOverlays()
         self.show()
+
+        if TEST:
+            # self.runAllPrediction()
+            self.runAllEvaluation()
 
     def wheelEvent(self, event):
         if not self.image_loaded:
@@ -437,6 +446,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             'operation': 'stroke',
             'data': s
         })
+        self.updateNumberOfStrokes()
         # print('addStroke:', mark)
 
     def addStrokePoint(self, imagey, imagex, imagez = None, plot = False):
@@ -560,6 +570,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             z = o['data']['z']
             self.stroke[z].pop()
             self.plotAll()
+            self.updateNumberOfStrokes()
         # print('undo:', self.operations[-1])
         self.operations.pop()
 
@@ -588,6 +599,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.show_pred ^= True
         self.plotAll()
 
+    def switchShowImage(self):
+        if not self.image_loaded:
+            return
+        self.show_image ^= True
+        self.plotAll()
+
     def getViewer(self, name):
         if name == 'flair':
             return self.viewer_flair
@@ -608,7 +625,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         elif direction == 'cor':
             qlabel = self.label_cor
             img_gray = np.flip(np.rot90(image.char_data[slice, :, :]), axis = 1).copy()
-
+        if not self.show_image:
+            img_gray *= 0
         img = np.stack((img_gray,) * 3, axis = -1)
         gt = np.rot90(self.image_manager.image['truth'].char_data[:, :, slice], -1).copy()
         pred = np.rot90(self.image_manager.image['pred'].char_data[:, :, slice], -1).copy()
@@ -663,7 +681,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     #     # img[mask == 1] += (np.array(color) * 2 / 3).astype(np.uint8)
 
     def drawMark(self, img, y, x, m, type):
-        color = [249, 167, 70] if m == '+' else [41, 200, 252]
+        color = [85, 248, 85] if m == '+' else [255, 226, 88]
+        # color = [249, 167, 70] if m == '+' else [41, 200, 252]
         if type == 'mark':
             for i in range(x - 2, x + 3):
                 if i >= 0 and i < IMAGE_SIZE:
@@ -672,12 +691,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 for i in range(y - 2, y + 3):
                     if i >= 0 and i < IMAGE_SIZE:
                         img[i][x] = color
-        color = [249, 167, 70] if m == '+' else [41, 200, 252]
+        # color = [249, 167, 70] if m == '+' else [41, 200, 252]
         # color = [253, 234, 114] if m == '+' else [87, 222, 253]
         if type == 'stroke':
             for i in range(x - 1, x + 2):
                 for j in range(y - 1, y + 2):
-                    img[j, i] = color
+                    if i >= 0 and i < IMAGE_SIZE:
+                        if j >= 0 and j < IMAGE_SIZE:
+                            img[j, i] = color
 
     def sliderValueChanged(self, value):
         # print(value)
@@ -727,6 +748,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.label_xy.setVisible(True)
         self.label_xy.setText('x: ' + str(x) + ', y: ' + str(y))
 
+    def updateNumberOfStrokes(self):
+        count = 0
+        for i in self.stroke:
+            count += len(i)
+        self.label_stroke.setText('Number of strokes: ' + str(count))
+
     def updateNumberOfMarks(self):
         count = 0
         for i in self.mark:
@@ -744,6 +771,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.container_sag.setVisible(True)
         self.container_cor.setVisible(True)
         self.updateNumberOfMarks()
+        self.updateNumberOfStrokes()
         self.updateResizeLevel()
 
     def saveOperations(self, prediction_filename):
@@ -760,7 +788,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         f.write(data)
         f.close()
 
-    def loadOperations(self, path, load_prediction = True):
+    def loadOperations(self, folder, load_prediction = True):
+        path = os.path.join(folder, MODEL + '.edit.json')
+        if not os.path.isfile(path):
+            path = os.path.join(folder, MODEL + '.no_edit.json')
         if os.path.isfile(path):
             f = open(path, 'r')
             data = json.loads(f.read())
@@ -783,6 +814,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # self.plotAll()
         if load_prediction:
             self.image_manager.loadPrediction(pred)
+
+    def runAllPrediction(self, path = '../../brats_naive124_half1'):
+        folders = os.listdir(path)
+        for f in folders:
+            p = os.path.join(path, f)
+            if not os.path.isfile(p):
+                self.image_manager.openProject(p)
+                self.apply()
+                self.image_manager.savePrediction()
+
+    def runAllEvaluation(self, path = '../../brats_naive124_half1'):
+        folders = os.listdir(path)
+        score = dict()
+        for f in folders:
+            p = os.path.join(path, f)
+            if not os.path.isfile(p):
+                score[f] = dict()
+                for r in ['naive', 'de', 'up', 'pen', 'de_up_pen']:
+                    file = open(os.path.join(path, f, r + '.no_edit.json'), 'r')
+                    data = json.loads(file.read())
+                    file.close()
+                    score[f][r] = data['score']
+                score[f]['subject'] = f
+        for i, t in enumerate(['dice', 'jaccard', 'precision', 'recall']):
+            out = open(os.path.join(path, t + '.csv'), 'w', newline='')
+            writer = csv.writer(out, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(['subject', 'naive', 'de', 'up', 'pen', 'de_up_pen'])
+            for s in score:
+                writer.writerow([(score[s][x] if x == 'subject' else score[s][x][i]) for x in ['subject', 'naive', 'de', 'up', 'pen', 'de_up_pen']])
+            out.close()
 
 
 if __name__ == '__main__':

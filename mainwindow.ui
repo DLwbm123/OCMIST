@@ -536,6 +536,13 @@
            </widget>
           </item>
           <item>
+           <widget class="QLabel" name="label_stroke">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QLabel" name="label_resize">
             <property name="text">
              <string/>
@@ -1063,6 +1070,7 @@
     </property>
     <addaction name="action_pred"/>
     <addaction name="action_gt"/>
+    <addaction name="action_image"/>
    </widget>
    <widget class="QMenu" name="menuTool">
     <property name="title">
@@ -1149,6 +1157,14 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+C</string>
+   </property>
+  </action>
+  <action name="action_image">
+   <property name="text">
+    <string>Show image</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+I</string>
    </property>
   </action>
  </widget>
