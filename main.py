@@ -18,7 +18,11 @@ VIEWER_SIZE = 384
 IMAGE_SIZE = 128
 MINI_VIEWER_SIZE = 160
 
-MODEL = 'pen'
+MODEL = 'de_up_pen'
+# MODEL = 'up'
+# MODEL = 'de'
+# MODEL = 'pen'
+# MODEL = 'naive'
 
 TEST = False
 
@@ -319,9 +323,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def keyPressEvent(self, event):
         if event.isAutoRepeat():
             return
-        if event.key() == Qt.Key_O:
-            path = 'Brats18_CBICA_ABB_1'
-            self.image_manager.openProject(path)
+        # if event.key() == Qt.Key_O:
+        #     path = 'Brats18_CBICA_ABB_1'
+        #     self.image_manager.openProject(path)
         if event.key() == Qt.Key_Escape:
             self.close()
 
@@ -778,6 +782,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         path = os.path.join(self.image_manager.path, MODEL + '.edit.json')
         if len(self.operations) == 0 and self.resize_level == 0:
             path = os.path.join(self.image_manager.path, MODEL + '.no_edit.json')
+        if len(self.operations) == 1 or (len(self.operations) == 0 and self.resize_level != 0):
+            path = os.path.join(self.image_manager.path, MODEL + '.one_edit.json')
         data = json.dumps({
             'score': self.calculateDiceJaccardPrecisionRecall(),
             'prediction': prediction_filename,
@@ -790,6 +796,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def loadOperations(self, folder, load_prediction = True):
         path = os.path.join(folder, MODEL + '.edit.json')
+        if not os.path.isfile(path):
+            path = os.path.join(folder, MODEL + '.one_edit.json')
         if not os.path.isfile(path):
             path = os.path.join(folder, MODEL + '.no_edit.json')
         if os.path.isfile(path):
@@ -827,22 +835,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def runAllEvaluation(self, path = '../../brats_naive124_half1'):
         folders = os.listdir(path)
         score = dict()
+        count = 0 # sum of interactions
         for f in folders:
             p = os.path.join(path, f)
             if not os.path.isfile(p):
                 score[f] = dict()
+                c = 0 # sum of interactions in this subject
                 for r in ['naive', 'de', 'up', 'pen', 'de_up_pen']:
                     file = open(os.path.join(path, f, r + '.no_edit.json'), 'r')
                     data = json.loads(file.read())
                     file.close()
                     score[f][r] = data['score']
+                for r in ['de_up_pen.one_edit', 'de_up_pen.edit']:
+                    score[f][r] = score[f]['de_up_pen'] # 如果没有编辑，就赋值为无编辑的score
+                    score[f][r] = score[f]['de_up_pen.one_edit'] # 如果只有一次编辑，就让多次编辑的赋值一次编辑的score
+                    filename = os.path.join(path, f, r + '.json')
+                    if os.path.isfile(filename):
+                        file = open(filename, 'r')
+                        data = json.loads(file.read())
+                        file.close()
+                        score[f][r] = data['score']
+                        c = max(c, len(data['operations']) + int(data['resize'] != 0))
                 score[f]['subject'] = f
+                count += c
+        print('sum of intreractions:', count)
         for i, t in enumerate(['dice', 'jaccard', 'precision', 'recall']):
             out = open(os.path.join(path, t + '.csv'), 'w', newline='')
             writer = csv.writer(out, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-            writer.writerow(['subject', 'naive', 'de', 'up', 'pen', 'de_up_pen'])
+            writer.writerow(['subject', 'naive', 'de', 'up', 'pen', 'de_up_pen', 'de_up_pen.one_edit', 'de_up_pen.edit'])
             for s in score:
-                writer.writerow([(score[s][x] if x == 'subject' else score[s][x][i]) for x in ['subject', 'naive', 'de', 'up', 'pen', 'de_up_pen']])
+                writer.writerow([(score[s][x] if x == 'subject' else score[s][x][i]) for x in ['subject', 'naive', 'de', 'up', 'pen', 'de_up_pen', 'de_up_pen.one_edit', 'de_up_pen.edit']])
             out.close()
 
 
